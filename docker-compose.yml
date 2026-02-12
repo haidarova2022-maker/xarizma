@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  xarizma-db:
+    image: postgres:16-alpine
+    container_name: xarizma-db
+    restart: always
+    environment:
+      POSTGRES_DB: xarizma
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: xarizma-db-Kp9qR2mX
+    volumes:
+      - xarizma-pgdata:/var/lib/postgresql/data
+    ports:
+      - "5438:5432"
+
+  xarizma-api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: xarizma-api
+    restart: always
+    depends_on:
+      - xarizma-db
+    environment:
+      DATABASE_URL: postgresql://postgres:xarizma-db-Kp9qR2mX@xarizma-db:5432/xarizma
+      JWT_SECRET: xarizma-jwt-7kM3pQ9rT2wX5yB8
+      PORT: 3000
+      NODE_ENV: production
+    ports:
+      - "3001:3000"
+
+volumes:
+  xarizma-pgdata:
