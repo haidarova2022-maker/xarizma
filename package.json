@@ -1,0 +1,25 @@
+{
+  "name": "xarizma",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Платформа управления бронированием «Харизма»",
+  "scripts": {
+    "dev:api": "turbo run dev --filter=@xarizma/api",
+    "dev:admin": "turbo run dev --filter=@xarizma/admin",
+    "dev:widget": "turbo run dev --filter=@xarizma/widget",
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "db:generate": "turbo run db:generate --filter=@xarizma/api",
+    "db:migrate": "turbo run db:migrate --filter=@xarizma/api",
+    "db:seed": "turbo run db:seed --filter=@xarizma/api"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  }
+}
