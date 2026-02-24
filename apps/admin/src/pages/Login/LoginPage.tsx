@@ -29,11 +29,11 @@ export default function LoginPage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, #6C5CE7 0%, #A29BFE 100%)',
+      background: 'linear-gradient(135deg, #E36FA8 0%, #EB8FC0 100%)',
     }}>
       <Card style={{ width: 400, borderRadius: 12 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <Title level={2} style={{ color: '#6C5CE7', margin: 0 }}>Харизма</Title>
+          <Title level={2} style={{ color: '#E36FA8', margin: 0 }}>Харизма</Title>
           <Text type="secondary">Платформа бронирования</Text>
         </div>
 

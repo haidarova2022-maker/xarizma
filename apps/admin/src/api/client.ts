@@ -66,3 +66,45 @@ export const updatePriceRule = (id: number, data: any) => api.put(`/pricing/${id
 export const getUsers = () => api.get('/users');
 export const createUser = (data: any) => api.post('/users', data);
 export const updateUser = (id: number, data: any) => api.put(`/users/${id}`, data);
+
+// Promo Codes
+export const getActivePromos = () => api.get('/promo-codes/active');
+export const getPromoCodes = () => api.get('/promo-codes');
+export const createPromoCode = (data: any) => api.post('/promo-codes', data);
+export const updatePromoCode = (id: number, data: any) => api.put(`/promo-codes/${id}`, data);
+export const deletePromoCode = (id: number) => api.delete(`/promo-codes/${id}`);
+
+// Packages
+export const getPackages = () => api.get('/packages');
+export const createPackage = (data: any) => api.post('/packages', data);
+export const updatePackage = (id: number, data: any) => api.put(`/packages/${id}`, data);
+
+// Waitlist
+export const getWaitlist = (params?: any) => api.get('/waitlist', { params });
+export const updateWaitlistEntry = (id: number, data: any) => api.put(`/waitlist/${id}`, data);
+
+// Notifications
+export const getNotifications = (params?: any) => api.get('/notifications', { params });
+export const getNotificationStats = () => api.get('/notifications/stats');
+
+// Empty Slots
+export const getEmptySlots = (date?: string) => api.get('/empty-slots', { params: date ? { date } : {} });
+
+// Dashboard
+export const getDashboardStats = (branchId?: number) =>
+  api.get('/dashboard/stats', { params: branchId ? { branchId } : {} });
+
+// Slot Config
+export const getSlotConfig = () => api.get('/slot-config');
+export const updateSlotConfig = (data: { startHour?: number; slotDuration?: number; gapHours?: number }) =>
+  api.put('/slot-config', data);
+
+// Analytics
+export const getSourceAnalytics = (branchId?: number) =>
+  api.get('/analytics/sources', { params: branchId ? { branchId } : {} });
+export const getManagerAnalytics = (branchId?: number) =>
+  api.get('/analytics/managers', { params: branchId ? { branchId } : {} });
+export const getRoomAnalytics = (branchId?: number) =>
+  api.get('/analytics/rooms', { params: branchId ? { branchId } : {} });
+export const getCancellationAnalytics = (branchId?: number) =>
+  api.get('/analytics/cancellations', { params: branchId ? { branchId } : {} });

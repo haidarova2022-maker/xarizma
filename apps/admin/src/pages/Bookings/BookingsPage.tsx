@@ -29,6 +29,20 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Отменена',
 };
 
+const SOURCE_LABELS: Record<string, string> = {
+  widget: 'Виджет',
+  admin: 'Админ',
+  phone: 'Телефон',
+  walkin: 'Walk-in',
+};
+
+const SOURCE_COLORS: Record<string, string> = {
+  widget: 'blue',
+  admin: 'default',
+  phone: 'cyan',
+  walkin: 'purple',
+};
+
 export default function BookingsPage() {
   const { selectedBranchId } = useBranchStore();
   const [bookings, setBookings] = useState<any[]>([]);
@@ -36,6 +50,7 @@ export default function BookingsPage() {
   const [showForm, setShowForm] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
+  const [sourceFilter, setSourceFilter] = useState<string | undefined>();
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
 
   const loadBookings = async () => {
@@ -43,6 +58,7 @@ export default function BookingsPage() {
     setLoading(true);
     const params: any = { branchId: selectedBranchId };
     if (statusFilter) params.status = statusFilter;
+    if (sourceFilter) params.source = sourceFilter;
     if (dateRange) {
       params.dateFrom = dateRange[0].startOf('day').toISOString();
       params.dateTo = dateRange[1].endOf('day').toISOString();
@@ -55,7 +71,7 @@ export default function BookingsPage() {
     }
   };
 
-  useEffect(() => { loadBookings(); }, [selectedBranchId, statusFilter, dateRange]);
+  useEffect(() => { loadBookings(); }, [selectedBranchId, statusFilter, sourceFilter, dateRange]);
 
   const columns = [
     { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
@@ -64,6 +80,12 @@ export default function BookingsPage() {
       dataIndex: 'status',
       key: 'status',
       render: (s: string) => <Tag color={STATUS_COLORS[s]}>{STATUS_LABELS[s]}</Tag>,
+    },
+    {
+      title: 'Источник',
+      dataIndex: 'source',
+      key: 'source',
+      render: (s: string) => <Tag color={SOURCE_COLORS[s] || 'default'}>{SOURCE_LABELS[s] || s}</Tag>,
     },
     { title: 'Гость', dataIndex: 'guestName', key: 'guestName' },
     { title: 'Телефон', dataIndex: 'guestPhone', key: 'guestPhone' },
@@ -112,6 +134,14 @@ export default function BookingsPage() {
             onChange={setStatusFilter}
             options={Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))}
           />
+          <Select
+            allowClear
+            placeholder="Источник"
+            style={{ width: 140 }}
+            value={sourceFilter}
+            onChange={setSourceFilter}
+            options={Object.entries(SOURCE_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+          />
           <RangePicker
             value={dateRange as any}
             onChange={(v) => setDateRange(v as any)}
@@ -130,8 +160,8 @@ export default function BookingsPage() {
       <BookingFormModal
         open={showForm}
         booking={selectedBooking}
-        onClose={() => setShowForm(false)}
-        onSuccess={() => { setShowForm(false); loadBookings(); }}
+        onClose={() => { setShowForm(false); setSelectedBooking(null); }}
+        onSuccess={() => { setShowForm(false); setSelectedBooking(null); loadBookings(); }}
       />
     </div>
   );

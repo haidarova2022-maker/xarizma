@@ -10,21 +10,29 @@ import './index.css';
 
 dayjs.locale('ru');
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ConfigProvider
-      locale={ruRU}
-      theme={{
-        token: {
-          colorPrimary: '#6C5CE7',
-          borderRadius: 8,
-        },
-        algorithm: theme.defaultAlgorithm,
-      }}
-    >
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </ConfigProvider>
-  </React.StrictMode>,
-);
+async function bootstrap() {
+  if (import.meta.env.VITE_MOCK_API === 'true') {
+    await import('./mock');
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <ConfigProvider
+        locale={ruRU}
+        theme={{
+          token: {
+            colorPrimary: '#E36FA8',
+            borderRadius: 8,
+          },
+          algorithm: theme.defaultAlgorithm,
+        }}
+      >
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </ConfigProvider>
+    </React.StrictMode>,
+  );
+}
+
+bootstrap();

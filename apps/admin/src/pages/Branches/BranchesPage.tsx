@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Typography, Table, Button, Modal, Form, Input, message, Tag } from 'antd';
 import { PlusOutlined, EditOutlined } from '@ant-design/icons';
-import { getBranches, createBranch, updateBranch } from '../../api/client';
+import { getBranches, createBranch, updateBranch, getRooms } from '../../api/client';
 
 const { Title } = Typography;
 
 export default function BranchesPage() {
   const [branches, setBranches] = useState<any[]>([]);
+  const [roomCounts, setRoomCounts] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -15,8 +16,13 @@ export default function BranchesPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await getBranches();
-      setBranches(data);
+      const [branchRes, roomsRes] = await Promise.all([getBranches(), getRooms()]);
+      setBranches(branchRes.data);
+      const counts: Record<number, number> = {};
+      for (const r of roomsRes.data) {
+        counts[r.branchId] = (counts[r.branchId] || 0) + 1;
+      }
+      setRoomCounts(counts);
     } catch {} finally {
       setLoading(false);
     }
@@ -59,10 +65,22 @@ export default function BranchesPage() {
 
   const columns = [
     { title: 'Название', dataIndex: 'name', key: 'name' },
-    { title: 'Slug', dataIndex: 'slug', key: 'slug' },
     { title: 'Адрес', dataIndex: 'address', key: 'address' },
     { title: 'Метро', dataIndex: 'metro', key: 'metro' },
     { title: 'Телефон', dataIndex: 'phone', key: 'phone' },
+    {
+      title: 'График',
+      dataIndex: 'scheduleLabel',
+      key: 'schedule',
+      width: 280,
+      render: (s: string) => <span style={{ fontSize: 12 }}>{s || '—'}</span>,
+    },
+    {
+      title: 'Залов',
+      key: 'rooms',
+      width: 70,
+      render: (_: any, r: any) => roomCounts[r.id] || 0,
+    },
     {
       title: 'Статус',
       key: 'status',

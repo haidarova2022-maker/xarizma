@@ -79,6 +79,12 @@ export default function RoomsPage() {
       render: (_: any, r: any) => `${r.capacityStandard}–${r.capacityMax}`,
     },
     {
+      title: 'Караоке',
+      dataIndex: 'karaokeType',
+      key: 'karaokeType',
+      render: (v: string) => v || '—',
+    },
+    {
       title: 'Бар',
       dataIndex: 'hasBar',
       key: 'hasBar',

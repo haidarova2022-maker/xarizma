@@ -10,6 +10,15 @@ import {
   DollarOutlined,
   UserOutlined,
   LogoutOutlined,
+  TagOutlined,
+  GiftOutlined,
+  ClockCircleOutlined,
+  BellOutlined,
+  WarningOutlined,
+  BarChartOutlined,
+  FundOutlined,
+  TeamOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '../../stores/auth-store';
 import { useBranchStore } from '../../stores/branch-store';
@@ -19,11 +28,28 @@ const { Text } = Typography;
 
 const menuItems = [
   { key: '/', icon: <DashboardOutlined />, label: 'Дашборд' },
-  { key: '/calendar', icon: <CalendarOutlined />, label: 'Календарь' },
+  { key: '/calendar', icon: <CalendarOutlined />, label: 'Календарь (слоты)' },
+  { key: '/calendar-simple', icon: <CalendarOutlined />, label: 'Календарь (простой)' },
   { key: '/bookings', icon: <UnorderedListOutlined />, label: 'Бронирования' },
+  { key: '/empty-slots', icon: <WarningOutlined />, label: 'Пустые окна' },
+  { key: '/waitlist', icon: <ClockCircleOutlined />, label: 'Лист ожидания' },
   { key: '/branches', icon: <BankOutlined />, label: 'Филиалы' },
   { key: '/rooms', icon: <HomeOutlined />, label: 'Залы' },
   { key: '/pricing', icon: <DollarOutlined />, label: 'Цены' },
+  { key: '/packages', icon: <GiftOutlined />, label: 'Пакеты' },
+  { key: '/promo-codes', icon: <TagOutlined />, label: 'Промокоды и акции' },
+  {
+    key: 'analytics',
+    icon: <BarChartOutlined />,
+    label: 'Аналитика',
+    children: [
+      { key: '/analytics/sources', icon: <FundOutlined />, label: 'По источникам' },
+      { key: '/analytics/managers', icon: <TeamOutlined />, label: 'По менеджерам' },
+      { key: '/analytics/rooms', icon: <HomeOutlined />, label: 'По залам' },
+      { key: '/analytics/cancellations', icon: <CloseCircleOutlined />, label: 'Отмены' },
+    ],
+  },
+  { key: '/notifications', icon: <BellOutlined />, label: 'Уведомления' },
   { key: '/users', icon: <UserOutlined />, label: 'Пользователи' },
 ];
 
@@ -60,13 +86,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           justifyContent: 'center',
           borderBottom: '1px solid #f0f0f0',
         }}>
-          <Text strong style={{ fontSize: collapsed ? 16 : 20, color: '#6C5CE7' }}>
+          <Text strong style={{ fontSize: collapsed ? 16 : 20, color: '#E36FA8' }}>
             {collapsed ? 'X' : 'Харизма'}
           </Text>
         </div>
         <Menu
           mode="inline"
           selectedKeys={[location.pathname]}
+          defaultOpenKeys={location.pathname.startsWith('/analytics') ? ['analytics'] : []}
           items={menuItems}
           onClick={({ key }) => navigate(key)}
           style={{ borderRight: 0 }}
@@ -90,7 +117,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           />
           <Dropdown menu={userMenu} placement="bottomRight">
             <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#6C5CE7' }} />
+              <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#E36FA8' }} />
               <Text>{user?.name}</Text>
             </div>
           </Dropdown>

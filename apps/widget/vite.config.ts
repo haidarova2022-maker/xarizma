@@ -7,8 +7,9 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'https://harizma-app-production.up.railway.app',
         changeOrigin: true,
+        secure: true,
       },
     },
   },
