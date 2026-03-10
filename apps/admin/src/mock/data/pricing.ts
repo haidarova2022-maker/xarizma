@@ -1,4 +1,4 @@
-const cats = ['bratski', 'vibe', 'flex', 'full_gas'] as const;
+const cats = ['bratski', 'vibe', 'flex', 'full_gas', 'common'] as const;
 const dayTypes = ['weekday_day', 'weekday_evening', 'friday_day', 'friday_evening', 'saturday', 'sunday'] as const;
 
 const matrix: Record<string, number[]> = {
@@ -6,6 +6,7 @@ const matrix: Record<string, number[]> = {
   vibe:     [3190, 3190, 3190, 4990, 4990, 3990],
   flex:     [3590, 3590, 3590, 5990, 5990, 4990],
   full_gas: [4390, 4390, 4390, 6990, 6990, 5490],
+  common:   [500, 500, 500, 800, 800, 600],
 };
 
 export let priceRules: any[] = [];

@@ -7,13 +7,14 @@ function r(
     vibe: 'AST-50',
     flex: 'AST-50 Premium',
     full_gas: 'AST-50 VIP',
+    common: '',
   };
   return {
     id, branchId, name, number, category, areaSqm,
     capacityStandard: capStd, capacityMax: capMax,
-    hasBar: category !== 'bratski',
-    hasKaraoke: true,
-    karaokeType: karaokeTypes[category] || 'AST-50',
+    hasBar: category === 'common' || category !== 'bratski',
+    hasKaraoke: category !== 'common',
+    karaokeType: karaokeTypes[category] || '',
     equipment: {}, photoUrls: [], isActive: true,
     createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
   };
@@ -42,8 +43,12 @@ export let rooms = [
   r(17, 2, 'Зал 8', 8, 'full_gas', 45, 15, 22),
   r(18, 2, 'Зал 9', 9, 'full_gas', 55, 18, 28),
   r(19, 2, 'VIP Зал', 10, 'full_gas', 70, 22, 35),
+  r(45, 2, 'Общий зал, стол 11', 11, 'common', 4, 2, 3),
+  r(46, 2, 'Общий зал, стол 12', 12, 'common', 4, 2, 3),
+  r(47, 2, 'Общий зал, стол 13', 13, 'common', 4, 2, 3),
+  r(48, 2, 'Общий зал, барная стойка', 99, 'common', 8, 5, 7),
 
-  // Новослободская (branch 3) — 8 rooms
+  // Новослободская (branch 3) — 8 rooms + 4 common
   r(20, 3, 'Зал 1', 1, 'bratski', 16, 4, 6),
   r(21, 3, 'Зал 2', 2, 'bratski', 18, 5, 8),
   r(22, 3, 'Зал 3', 3, 'vibe', 24, 6, 10),
@@ -52,6 +57,10 @@ export let rooms = [
   r(25, 3, 'Зал 6', 6, 'flex', 40, 12, 18),
   r(26, 3, 'Зал 7', 7, 'full_gas', 50, 15, 25),
   r(27, 3, 'VIP Зал', 8, 'full_gas', 65, 20, 32),
+  r(49, 3, 'Общий зал, стол 11', 11, 'common', 3, 1, 2),
+  r(50, 3, 'Общий зал, стол 12', 12, 'common', 3, 1, 2),
+  r(51, 3, 'Общий зал, стол 13', 13, 'common', 3, 1, 2),
+  r(52, 3, 'Общий зал, барная стойка', 99, 'common', 6, 3, 5),
 
   // Лубянка (branch 4) — 6 rooms
   r(28, 4, 'Зал 1', 1, 'bratski', 15, 4, 6),

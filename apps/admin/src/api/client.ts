@@ -49,8 +49,8 @@ export const updateRoom = (id: number, data: any) => api.put(`/rooms/${id}`, dat
 // Bookings
 export const getBookings = (params?: any) => api.get('/bookings', { params });
 export const getBooking = (id: number) => api.get(`/bookings/${id}`);
-export const getCalendar = (branchId: number, dateFrom: string, dateTo: string) =>
-  api.get('/bookings/calendar', { params: { branchId, dateFrom, dateTo } });
+export const getCalendar = (branchId: number | undefined, dateFrom: string, dateTo: string) =>
+  api.get('/bookings/calendar', { params: { ...(branchId ? { branchId } : {}), dateFrom, dateTo } });
 export const createBooking = (data: any) => api.post('/bookings', data);
 export const updateBooking = (id: number, data: any) => api.put(`/bookings/${id}`, data);
 export const getAvailableSlots = (params: any) =>

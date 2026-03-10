@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Typography, Table, Tag, Select, DatePicker, Space, Button } from 'antd';
-import { EyeOutlined } from '@ant-design/icons';
+import { Typography, Table, Tag, Select, DatePicker, Space, Button, Input } from 'antd';
+import { EyeOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useBranchStore } from '../../stores/branch-store';
 import { getBookings } from '../../api/client';
@@ -10,23 +10,17 @@ const { Title } = Typography;
 const { RangePicker } = DatePicker;
 
 const STATUS_COLORS: Record<string, string> = {
-  new: 'gold',
-  awaiting_payment: 'orange',
-  partially_paid: 'green',
-  fully_paid: 'green',
-  walkin: 'purple',
-  completed: 'cyan',
+  preliminary: 'orange',
+  paid: 'green',
+  completed: 'blue',
   cancelled: 'red',
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  new: 'Новая',
-  awaiting_payment: 'Ожидает оплаты',
-  partially_paid: 'Частичная оплата',
-  fully_paid: 'Оплачена',
-  walkin: 'Ситуативная',
-  completed: 'Реализована',
-  cancelled: 'Отменена',
+  preliminary: 'Предварительная',
+  paid: 'Оплачена',
+  completed: 'Завершена',
+  cancelled: 'Отказ',
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -52,13 +46,16 @@ export default function BookingsPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [sourceFilter, setSourceFilter] = useState<string | undefined>();
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
+  const [phoneSearch, setPhoneSearch] = useState('');
 
   const loadBookings = async () => {
-    if (!selectedBranchId) return;
+    if (selectedBranchId === null) return;
     setLoading(true);
-    const params: any = { branchId: selectedBranchId };
+    const params: any = {};
+    if (selectedBranchId) params.branchId = selectedBranchId;
     if (statusFilter) params.status = statusFilter;
     if (sourceFilter) params.source = sourceFilter;
+    if (phoneSearch.trim()) params.phone = phoneSearch.trim();
     if (dateRange) {
       params.dateFrom = dateRange[0].startOf('day').toISOString();
       params.dateTo = dateRange[1].endOf('day').toISOString();
@@ -71,7 +68,7 @@ export default function BookingsPage() {
     }
   };
 
-  useEffect(() => { loadBookings(); }, [selectedBranchId, statusFilter, sourceFilter, dateRange]);
+  useEffect(() => { loadBookings(); }, [selectedBranchId, statusFilter, sourceFilter, dateRange, phoneSearch]);
 
   const columns = [
     { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
@@ -126,6 +123,14 @@ export default function BookingsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Title level={3} style={{ margin: 0 }}>Бронирования</Title>
         <Space>
+          <Input
+            allowClear
+            placeholder="Поиск по телефону"
+            prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+            style={{ width: 200 }}
+            value={phoneSearch}
+            onChange={(e) => setPhoneSearch(e.target.value)}
+          />
           <Select
             allowClear
             placeholder="Статус"

@@ -14,6 +14,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   vibe: 'Вайб',
   flex: 'Флекс',
   full_gas: 'Полный газ',
+  common: 'Общий зал',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -58,15 +59,15 @@ export default function CalendarSimplePage() {
   const todayHoursCount = 24 - GRID_START_HOUR;
 
   const loadData = async () => {
-    if (!selectedBranchId) return;
+    if (selectedBranchId === null) return;
     setLoading(true);
     try {
       const dateFrom = date.hour(GRID_START_HOUR).minute(0).second(0).toISOString();
       const tomorrowHoursCount = GRID_TOTAL - todayHoursCount;
       const dateTo = nextDay.hour(GRID_START_HOUR - 1 + tomorrowHoursCount).minute(59).second(59).toISOString();
       const [calRes, roomsRes, pricingRes] = await Promise.all([
-        getCalendar(selectedBranchId, dateFrom, dateTo),
-        getRooms(selectedBranchId),
+        getCalendar(selectedBranchId || undefined, dateFrom, dateTo),
+        getRooms(selectedBranchId || undefined),
         getPricing(),
       ]);
       setBookings(calRes.data);
@@ -115,19 +116,32 @@ export default function CalendarSimplePage() {
     return rule?.pricePerHour || 0;
   };
 
-  const getBookingForCell = (roomId: number, gridIdx: number) => {
-    const realHour = gridToHour(gridIdx);
-    const isNextDay = gridIdx >= todayHoursCount;
-    const cellDay = isNextDay ? nextDay : date;
-    const cellStart = cellDay.hour(realHour).minute(0).second(0);
-    const cellEnd = cellStart.add(1, 'hour');
-    return bookings.find((b: any) => {
-      if (b.roomId !== roomId) return false;
-      const bStart = dayjs(b.startTime);
-      const bEnd = dayjs(b.endTime);
-      return bStart.isBefore(cellEnd) && bEnd.isAfter(cellStart);
-    });
-  };
+  // Convert a booking datetime to grid position (fractional hours from GRID_START_HOUR)
+  const dayjsToGrid = useCallback((dt: Dayjs): number => {
+    const isNextDay = dt.isAfter(date.endOf('day'));
+    const h = dt.hour() + dt.minute() / 60;
+    if (isNextDay) {
+      return todayHoursCount + (h - GRID_START_HOUR + 24) % 24;
+    }
+    return h - GRID_START_HOUR;
+  }, [date, todayHoursCount]);
+
+  // Get all bookings for a room as positioned overlays
+  const getRoomBookings = useCallback((roomId: number) => {
+    return bookings
+      .filter((b: any) => b.roomId === roomId)
+      .map((b: any) => {
+        const bStart = dayjs(b.startTime);
+        const bEnd = dayjs(b.endTime);
+        let gridFrom = dayjsToGrid(bStart);
+        let gridTo = dayjsToGrid(bEnd);
+        if (gridTo <= 0 || gridFrom >= GRID_TOTAL) return null;
+        gridFrom = Math.max(0, gridFrom);
+        gridTo = Math.min(GRID_TOTAL, gridTo);
+        return { ...b, gridFrom, gridTo };
+      })
+      .filter(Boolean);
+  }, [bookings, dayjsToGrid]);
 
   const gridIndices = Array.from({ length: GRID_TOTAL }, (_, i) => i);
 
@@ -147,6 +161,13 @@ export default function CalendarSimplePage() {
     <div>
       {/* Branch tabs */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #f0f0f0' }}>
+        <div onClick={() => selectBranch(0)} style={{
+          padding: '6px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontSize: 14,
+          backgroundColor: selectedBranchId === 0 ? '#E36FA8' : '#fff', color: selectedBranchId === 0 ? '#fff' : '#333',
+          border: selectedBranchId === 0 ? '2px solid #E36FA8' : '2px solid #e8e8e8', transition: 'all 0.2s',
+        }}>
+          Все
+        </div>
         {branches.map((b: any) => {
           const shortName = b.name.replace(/^Харизма\s+/, '');
           const isActive = b.id === selectedBranchId;
@@ -164,7 +185,7 @@ export default function CalendarSimplePage() {
 
       {/* Title + date nav */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>{branchShortName}</Title>
+        <Title level={4} style={{ margin: 0 }}>{selectedBranchId === 0 ? 'Все филиалы' : branchShortName}</Title>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
           <Button size="small" icon={<LeftOutlined />} onClick={() => setDate(d => d.subtract(1, 'day'))} />
           <span style={{ fontWeight: 500, fontSize: 14, minWidth: 100, textAlign: 'center' }}>
@@ -234,77 +255,87 @@ export default function CalendarSimplePage() {
             </div>
 
             {/* Room rows */}
-            {rooms.map((room: any) => (
-              <div key={room.id} style={{ display: 'flex', borderBottom: '1px solid #f5f5f5', alignItems: 'stretch' }}>
-                <div style={{ width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0' }}>
-                  <div style={{ fontWeight: 600, fontSize: 12, lineHeight: '16px' }}>{room.name}</div>
-                  <div style={{ fontWeight: 600, fontSize: 11, color: '#E36FA8', lineHeight: '14px' }}>
-                    {CATEGORY_LABELS[room.category] || room.category}
+            {rooms.map((room: any) => {
+              const roomBookings = getRoomBookings(room.id);
+              return (
+                <div key={room.id} style={{ display: 'flex', borderBottom: '1px solid #f5f5f5', alignItems: 'stretch' }}>
+                  <div style={{ width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0' }}>
+                    <div style={{ fontWeight: 600, fontSize: 12, lineHeight: '16px' }}>{room.name}</div>
+                    <div style={{ fontWeight: 600, fontSize: 11, color: '#E36FA8', lineHeight: '14px' }}>
+                      {CATEGORY_LABELS[room.category] || room.category}
+                    </div>
+                    <div style={{ color: '#8c8c8c', fontSize: 10, marginTop: 2 }}>до {room.capacityMax} чел.</div>
                   </div>
-                  <div style={{ color: '#8c8c8c', fontSize: 10, marginTop: 2 }}>до {room.capacityMax} чел.</div>
-                </div>
 
-                <div style={{ display: 'flex', flex: 1 }}>
-                  {gridIndices.map(gi => {
-                    const booking = getBookingForCell(room.id, gi);
-                    const price = getPrice(room.category, gi);
-                    const isMidnight = gi === todayHoursCount;
-                    const closed = isCellClosed(gi);
+                  <div style={{ position: 'relative', display: 'flex', flex: 1 }}>
+                    {/* Background cells (prices, closed) */}
+                    {gridIndices.map(gi => {
+                      const price = getPrice(room.category, gi);
+                      const isMidnight = gi === todayHoursCount;
+                      const closed = isCellClosed(gi);
 
-                    if (closed) {
                       return (
-                        <div key={gi} style={{
+                        <div key={gi} onClick={() => !closed && handleCellClick(room.id, gi)} style={{
                           width: CELL_W, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          padding: '4px 2px',
+                          padding: '4px 2px', cursor: closed ? 'default' : 'pointer',
                           borderLeft: isMidnight ? '2px solid #d9d9d9' : 'none',
                         }}>
                           <div style={{
                             width: '100%', height: '100%', borderRadius: 4, minHeight: 36,
-                            backgroundColor: '#f5f5f5', border: '1px solid #e8e8e8',
-                          }} />
-                        </div>
-                      );
-                    }
-
-                    if (booking) {
-                      return (
-                        <div key={gi} onClick={() => handleCellClick(room.id, gi, booking)} style={{
-                          width: CELL_W, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          padding: '4px 2px', cursor: 'pointer',
-                          borderLeft: isMidnight ? '2px solid #d9d9d9' : 'none',
-                        }}>
-                          <div style={{
-                            width: '100%', height: '100%', borderRadius: 4, minHeight: 36,
-                            backgroundColor: STATUS_COLORS[booking.status] || '#ddd',
+                            backgroundColor: closed ? '#f5f5f5' : '#F0FFF0',
+                            border: closed ? '1px solid #e8e8e8' : '1px solid #C8E6C9',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 9, fontWeight: 500, color: '#333', border: '1px solid rgba(0,0,0,0.08)',
+                            fontSize: 10, fontWeight: 500,
+                            color: closed ? '#d9d9d9' : '#555',
                           }}>
-                            {booking.guestName?.split(' ')[0]}
+                            {closed ? '' : `${(price / 1000).toFixed(1)}k`}
                           </div>
                         </div>
                       );
-                    }
+                    })}
 
-                    return (
-                      <div key={gi} onClick={() => handleCellClick(room.id, gi)} style={{
-                        width: CELL_W, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        padding: '4px 2px', cursor: 'pointer',
-                        borderLeft: isMidnight ? '2px solid #d9d9d9' : 'none',
-                      }}>
-                        <div style={{
-                          width: '100%', height: '100%', borderRadius: 4, minHeight: 36,
-                          backgroundColor: '#F0FFF0', border: '1px solid #C8E6C9',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 10, fontWeight: 500, color: '#555',
-                        }}>
-                          {`${(price / 1000).toFixed(1)}k`}
+                    {/* Booking overlays — pixel-precise positioning */}
+                    {roomBookings.map((b: any) => {
+                      const left = b.gridFrom * CELL_W + 2;
+                      const width = (b.gridTo - b.gridFrom) * CELL_W - 4;
+                      const bStart = dayjs(b.startTime);
+                      const bEnd = dayjs(b.endTime);
+                      return (
+                        <div
+                          key={b.id}
+                          onClick={() => handleCellClick(room.id, Math.floor(b.gridFrom), b)}
+                          style={{
+                            position: 'absolute',
+                            left,
+                            width,
+                            top: 4,
+                            bottom: 4,
+                            borderRadius: 4,
+                            backgroundColor: STATUS_COLORS[b.status] || '#ddd',
+                            border: '1px solid rgba(0,0,0,0.1)',
+                            cursor: 'pointer',
+                            zIndex: 2,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            overflow: 'hidden',
+                            padding: '0 2px',
+                          }}
+                        >
+                          <span style={{ fontSize: 10, fontWeight: 600, color: '#333', lineHeight: '13px', whiteSpace: 'nowrap' }}>
+                            {b.guestName?.split(' ')[0]}
+                          </span>
+                          <span style={{ fontSize: 8, color: '#555', lineHeight: '11px', whiteSpace: 'nowrap' }}>
+                            {bStart.format('HH:mm')}–{bEnd.format('HH:mm')}
+                          </span>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

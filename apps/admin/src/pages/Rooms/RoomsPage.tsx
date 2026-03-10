@@ -11,6 +11,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   vibe: 'Вайб',
   flex: 'Флекс',
   full_gas: 'Полный газ',
+  common: 'Общий зал',
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -18,6 +19,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   vibe: 'green',
   flex: 'orange',
   full_gas: 'red',
+  common: 'default',
 };
 
 export default function RoomsPage() {
@@ -29,10 +31,10 @@ export default function RoomsPage() {
   const [form] = Form.useForm();
 
   const load = async () => {
-    if (!selectedBranchId) return;
+    if (selectedBranchId === null) return;
     setLoading(true);
     try {
-      const { data } = await getRooms(selectedBranchId);
+      const { data } = await getRooms(selectedBranchId || undefined);
       setRooms(data);
     } catch {} finally {
       setLoading(false);

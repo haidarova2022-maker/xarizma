@@ -28,10 +28,9 @@ const { Text } = Typography;
 
 const menuItems = [
   { key: '/', icon: <DashboardOutlined />, label: 'Дашборд' },
-  { key: '/calendar', icon: <CalendarOutlined />, label: 'Календарь (слоты)' },
-  { key: '/calendar-simple', icon: <CalendarOutlined />, label: 'Календарь (простой)' },
+  { key: '/calendar', icon: <CalendarOutlined />, label: 'Календарь' },
   { key: '/bookings', icon: <UnorderedListOutlined />, label: 'Бронирования' },
-  { key: '/empty-slots', icon: <WarningOutlined />, label: 'Пустые окна' },
+  { key: '/empty-slots', icon: <WarningOutlined />, label: 'Свободные слоты' },
   { key: '/waitlist', icon: <ClockCircleOutlined />, label: 'Лист ожидания' },
   { key: '/branches', icon: <BankOutlined />, label: 'Филиалы' },
   { key: '/rooms', icon: <HomeOutlined />, label: 'Залы' },
@@ -113,7 +112,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             onChange={selectBranch}
             style={{ width: 240 }}
             placeholder="Выберите филиал"
-            options={branches.map((b: any) => ({ value: b.id, label: b.name }))}
+            options={[{ value: 0, label: 'Все филиалы' }, ...branches.map((b: any) => ({ value: b.id, label: b.name }))]}
           />
           <Dropdown menu={userMenu} placement="bottomRight">
             <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>

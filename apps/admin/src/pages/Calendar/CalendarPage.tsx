@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { Typography, Spin, Empty, message, Button } from 'antd';
+import { Typography, Spin, Empty, message, Button, Switch, DatePicker } from 'antd';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { useBranchStore } from '../../stores/branch-store';
@@ -14,51 +14,87 @@ const CATEGORY_LABELS: Record<string, string> = {
   vibe: 'Вайб',
   flex: 'Флекс',
   full_gas: 'Полный газ',
+  common: 'Общий зал',
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  new: '#FFE082',
-  awaiting_payment: '#FFCC80',
-  partially_paid: '#A5D6A7',
-  fully_paid: '#4CAF50',
-  walkin: '#CE93D8',
-  completed: '#81C784',
+  preliminary: '#FFCC80',
+  paid: '#4CAF50',
+  completed: '#64B5F6',
   cancelled: '#EF9A9A',
 };
 
-const GRID_START_HOUR = 9;
-const GRID_TOTAL = 36;
 const CELL_W = 40;
 const HALF_CELL = CELL_W / 2;
 const ROOM_COL = 100;
+
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+
+/** Compute grid start hour and total hours from branch schedule */
+function getGridRange(branch: any, date: Dayjs): { startHour: number; totalHours: number } {
+  if (!branch?.workingHours) return { startHour: 0, totalHours: 24 }; // "Все" — full day
+
+  const dow = date.day();
+  const schedule = branch.workingHours[DAY_KEYS[dow]];
+
+  if (!schedule) {
+    // Day off — check if previous day carries over
+    const prevSchedule = branch.workingHours[DAY_KEYS[(dow + 6) % 7]];
+    if (prevSchedule) {
+      if (prevSchedule.is24h) return { startHour: 0, totalHours: 6 };
+      const closeH = parseInt(prevSchedule.close.split(':')[0], 10);
+      const openH = parseInt(prevSchedule.open.split(':')[0], 10);
+      if (closeH < openH) return { startHour: 0, totalHours: closeH };
+    }
+    return { startHour: 14, totalHours: 16 };
+  }
+
+  if (schedule.is24h) {
+    const openH = parseInt(schedule.open.split(':')[0], 10);
+    if (openH === 0) return { startHour: 0, totalHours: 24 };
+    // e.g. Friday from 14:00 running 24h → show 14:00 to 06:00 next day
+    return { startHour: openH, totalHours: (24 - openH) + 6 };
+  }
+
+  const openH = parseInt(schedule.open.split(':')[0], 10);
+  const closeH = parseInt(schedule.close.split(':')[0], 10);
+  if (closeH <= openH) {
+    // Overnight: 14:00-06:00
+    return { startHour: openH, totalHours: (24 - openH) + closeH };
+  }
+  return { startHour: openH, totalHours: closeH - openH };
+}
 
 interface SlotDef { from: number; to: number; }
 interface RoomSlots { [roomId: number]: SlotDef[]; }
 interface SlotConfig { startHour: number; slotDuration: number; gapHours: number; }
 
-function generateSlots(cfg: SlotConfig): SlotDef[] {
+function generateSlots(cfg: SlotConfig, gridStartHour: number, gridTotal: number): SlotDef[] {
   const slots: SlotDef[] = [];
   const step = cfg.slotDuration + cfg.gapHours;
-  const gridStart = cfg.startHour - GRID_START_HOUR;
+  const gridStart = cfg.startHour - gridStartHour;
   for (let i = 0; i < 10; i++) {
     const from = gridStart + i * step;
     const to = from + cfg.slotDuration;
     if (from < 0) continue;
-    if (from >= GRID_TOTAL) break;
-    slots.push({ from, to: Math.min(to, GRID_TOTAL) });
+    if (from >= gridTotal) break;
+    slots.push({ from, to: Math.min(to, gridTotal) });
   }
   return slots;
 }
 
-function gridToHour(grid: number): number {
-  return (GRID_START_HOUR + grid) % 24;
+function makeGridToHour(gridStartHour: number) {
+  return (grid: number): number => (gridStartHour + Math.floor(grid)) % 24;
 }
 
-function gridToTime(grid: number): string {
-  const h = gridToHour(grid);
-  const frac = grid % 1;
-  const m = Math.round(frac * 60);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+function makeGridToTime(gridStartHour: number) {
+  const toHour = makeGridToHour(gridStartHour);
+  return (grid: number): string => {
+    const h = toHour(grid);
+    const frac = grid % 1;
+    const m = Math.round(frac * 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
 }
 
 function getDayType(date: Dayjs, hour: number): string {
@@ -80,7 +116,7 @@ function hasSlotOverlap(slots: SlotDef[], index: number, candidate: SlotDef): bo
 }
 
 // Draggable + resizable slot frame
-function SlotFrame({ slot, index, roomId, allSlots, onMove, onResize, onSlotClick }: {
+function SlotFrame({ slot, index, roomId, allSlots, onMove, onResize, onSlotClick, gridTotal, gridToTimeFn }: {
   slot: SlotDef;
   index: number;
   roomId: number;
@@ -88,6 +124,8 @@ function SlotFrame({ slot, index, roomId, allSlots, onMove, onResize, onSlotClic
   onMove: (roomId: number, index: number, newSlot: SlotDef) => void;
   onResize: (roomId: number, index: number, newSlot: SlotDef) => void;
   onSlotClick?: (roomId: number, slot: SlotDef) => void;
+  gridTotal: number;
+  gridToTimeFn: (grid: number) => string;
 }) {
   const moveRef = useRef<{ startX: number; origFrom: number; origTo: number } | null>(null);
   const resizeRef = useRef<{ startX: number; origTo: number; edge: 'left' | 'right' } | null>(null);
@@ -115,7 +153,7 @@ function SlotFrame({ slot, index, roomId, allSlots, onMove, onResize, onSlotClic
       const offset = steps * 0.5;
       const newFrom = moveRef.current.origFrom + offset;
       const newTo = moveRef.current.origTo + offset;
-      if (newFrom >= 0 && newTo <= GRID_TOTAL && frameRef.current) {
+      if (newFrom >= 0 && newTo <= gridTotal && frameRef.current) {
         frameRef.current.style.left = `${newFrom * CELL_W}px`;
         const c = hasSlotOverlap(allSlots, index, { from: newFrom, to: newTo });
         setConflict(c);
@@ -142,7 +180,7 @@ function SlotFrame({ slot, index, roomId, allSlots, onMove, onResize, onSlotClic
       const newFrom = moveRef.current.origFrom + offset;
       const newTo = moveRef.current.origTo + offset;
 
-      if (newFrom >= 0 && newTo <= GRID_TOTAL) {
+      if (newFrom >= 0 && newTo <= gridTotal) {
         if (hasSlotOverlap(allSlots, index, { from: newFrom, to: newTo })) {
           message.error('Конфликт: слот накладывается на другой слот');
           if (frameRef.current) {
@@ -186,7 +224,7 @@ function SlotFrame({ slot, index, roomId, allSlots, onMove, onResize, onSlotClic
         candidate = { from: newVal, to: slot.to };
       }
 
-      if (candidate.from >= 0 && candidate.to <= GRID_TOTAL && candidate.to - candidate.from >= 1) {
+      if (candidate.from >= 0 && candidate.to <= gridTotal && candidate.to - candidate.from >= 1) {
         if (frameRef.current) {
           if (resizeRef.current.edge === 'right') {
             frameRef.current.style.width = `${(candidate.to - candidate.from) * CELL_W}px`;
@@ -214,7 +252,7 @@ function SlotFrame({ slot, index, roomId, allSlots, onMove, onResize, onSlotClic
         candidate = { from: newVal, to: slot.to };
       }
 
-      if (candidate.from >= 0 && candidate.to <= GRID_TOTAL && candidate.to - candidate.from >= 1) {
+      if (candidate.from >= 0 && candidate.to <= gridTotal && candidate.to - candidate.from >= 1) {
         if (hasSlotOverlap(allSlots, index, candidate)) {
           message.error('Конфликт: слот накладывается на другой слот');
           if (frameRef.current) {
@@ -250,7 +288,7 @@ function SlotFrame({ slot, index, roomId, allSlots, onMove, onResize, onSlotClic
         width,
         top: 1,
         bottom: 1,
-        border: `2px dashed ${borderColor}`,
+        border: `2px solid ${borderColor}`,
         borderRadius: 6,
         zIndex: 3,
         pointerEvents: 'auto',
@@ -307,7 +345,7 @@ function SlotFrame({ slot, index, roomId, allSlots, onMove, onResize, onSlotClic
         whiteSpace: 'nowrap',
         pointerEvents: 'none',
       }}>
-        {gridToTime(slot.from)}–{gridToTime(slot.to)}
+        {gridToTimeFn(slot.from)}–{gridToTimeFn(slot.to)}
       </span>
     </div>
   );
@@ -325,20 +363,29 @@ export default function CalendarPage() {
   const [prefill, setPrefill] = useState<{ roomId?: number; date?: Dayjs; timeFrom?: Dayjs; timeTo?: Dayjs } | undefined>();
   const [roomSlots, setRoomSlots] = useState<RoomSlots>({});
   const [slotCfg, setSlotCfg] = useState<SlotConfig>({ startHour: 9, slotDuration: 3, gapHours: 1 });
+  const [slotsVisible, setSlotsVisible] = useState(true);
 
   const nextDay = useMemo(() => date.add(1, 'day'), [date]);
-  const todayHoursCount = 24 - GRID_START_HOUR;
+  const branch = branches.find((b: any) => b.id === selectedBranchId);
+  const branchShortName = branch?.name?.replace(/^Харизма\s+/, '') || '';
+
+  // Fixed 2-day grid: 09:00 today → 21:00 tomorrow (36 hours)
+  const gridStartHour = 9;
+  const gridTotal = 36;
+  const todayHoursCount = 24 - gridStartHour; // 15
+  const gridToHour = useMemo(() => makeGridToHour(gridStartHour), []);
+  const gridToTime = useMemo(() => makeGridToTime(gridStartHour), []);
+  const gridIndices = useMemo(() => Array.from({ length: gridTotal }, (_, i) => i), []);
 
   const loadData = async () => {
-    if (!selectedBranchId) return;
+    if (selectedBranchId === null) return;
     setLoading(true);
     try {
-      const dateFrom = date.hour(GRID_START_HOUR).minute(0).second(0).toISOString();
-      const tomorrowHoursCount = GRID_TOTAL - todayHoursCount;
-      const dateTo = nextDay.hour(GRID_START_HOUR - 1 + tomorrowHoursCount).minute(59).second(59).toISOString();
+      const dateFrom = date.hour(gridStartHour).minute(0).second(0).toISOString();
+      const dateTo = nextDay.hour(20).minute(59).second(59).toISOString();
       const [calRes, roomsRes, pricingRes, cfgRes] = await Promise.all([
-        getCalendar(selectedBranchId, dateFrom, dateTo),
-        getRooms(selectedBranchId),
+        getCalendar(selectedBranchId || undefined, dateFrom, dateTo),
+        getRooms(selectedBranchId || undefined),
         getPricing(),
         getSlotConfig(),
       ]);
@@ -348,7 +395,7 @@ export default function CalendarPage() {
 
       const cfg: SlotConfig = cfgRes.data;
       setSlotCfg(cfg);
-      const defaultSlots = generateSlots(cfg);
+      const defaultSlots = generateSlots(cfg, gridStartHour, gridTotal);
 
       const newSlots: RoomSlots = {};
       for (const r of roomsRes.data) {
@@ -371,7 +418,7 @@ export default function CalendarPage() {
     const frac = gridIdx % 1;
     const m = Math.round(frac * 60);
     return (isNextDay ? nextDay : date).hour(h).minute(m).second(0);
-  }, [date, nextDay, todayHoursCount]);
+  }, [date, nextDay, todayHoursCount, gridToHour]);
 
   const handleSlotClick = useCallback((roomId: number, slot: SlotDef) => {
     setPrefill({
@@ -403,10 +450,7 @@ export default function CalendarPage() {
       return updated;
     });
     message.info(`Слот: ${gridToTime(newSlot.from)}–${gridToTime(newSlot.to)}`);
-  }, []);
-
-  const branch = branches.find((b: any) => b.id === selectedBranchId);
-  const branchShortName = branch?.name?.replace(/^Харизма\s+/, '') || '';
+  }, [gridToTime]);
 
   const getPrice = (category: string, gridIdx: number) => {
     const realHour = gridToHour(gridIdx);
@@ -430,6 +474,34 @@ export default function CalendarPage() {
     });
   };
 
+  // Convert a booking datetime to grid position (fractional hours from gridStartHour)
+  const dayjsToGrid = useCallback((dt: Dayjs): number => {
+    const isNextDay = dt.isAfter(date.endOf('day'));
+    const h = dt.hour() + dt.minute() / 60;
+    if (isNextDay) {
+      return todayHoursCount + (h - gridStartHour + 24) % 24;
+    }
+    return h - gridStartHour;
+  }, [date, todayHoursCount]);
+
+  // Get all bookings for a room as positioned overlays
+  const getRoomBookings = useCallback((roomId: number) => {
+    return bookings
+      .filter((b: any) => b.roomId === roomId)
+      .map((b: any) => {
+        const bStart = dayjs(b.startTime);
+        const bEnd = dayjs(b.endTime);
+        let gridFrom = dayjsToGrid(bStart);
+        let gridTo = dayjsToGrid(bEnd);
+        // Clamp to visible grid
+        if (gridTo <= 0 || gridFrom >= gridTotal) return null;
+        gridFrom = Math.max(0, gridFrom);
+        gridTo = Math.min(gridTotal, gridTo);
+        return { ...b, gridFrom, gridTo };
+      })
+      .filter(Boolean);
+  }, [bookings, dayjsToGrid]);
+
   const isGapCell = (roomId: number, gridIdx: number): boolean => {
     const slots = roomSlots[roomId] || [];
     for (const s of slots) {
@@ -442,24 +514,29 @@ export default function CalendarPage() {
     return false;
   };
 
-  const gridIndices = Array.from({ length: GRID_TOTAL }, (_, i) => i);
-
   const isCellClosed = useCallback((gi: number): boolean => {
     if (!branch?.workingHours) return false;
     const realHour = gridToHour(gi);
     const isNextDay = gi >= todayHoursCount;
     const cellDay = isNextDay ? nextDay : date;
     return !isHourOpen(branch.workingHours, cellDay, realHour);
-  }, [branch, date, nextDay, todayHoursCount]);
+  }, [branch, date, nextDay, todayHoursCount, gridToHour]);
 
   const todayIsDayOff = branch?.workingHours
-    ? isDayFullyClosed(branch.workingHours, date, GRID_START_HOUR, 23)
+    ? isDayFullyClosed(branch.workingHours, date, gridStartHour, gridStartHour + gridTotal - 1)
     : false;
 
   return (
     <div>
       {/* Branch tabs */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid #f0f0f0' }}>
+        <div onClick={() => selectBranch(0)} style={{
+          padding: '6px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontSize: 14,
+          backgroundColor: selectedBranchId === 0 ? '#E36FA8' : '#fff', color: selectedBranchId === 0 ? '#fff' : '#333',
+          border: selectedBranchId === 0 ? '2px solid #E36FA8' : '2px solid #e8e8e8', transition: 'all 0.2s',
+        }}>
+          Все
+        </div>
         {branches.map((b: any) => {
           const shortName = b.name.replace(/^Харизма\s+/, '');
           const isActive = b.id === selectedBranchId;
@@ -477,13 +554,24 @@ export default function CalendarPage() {
 
       {/* Title + date nav */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>{branchShortName}</Title>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-          <Button size="small" icon={<LeftOutlined />} onClick={() => setDate(d => d.subtract(1, 'day'))} />
-          <span style={{ fontWeight: 500, fontSize: 14, minWidth: 100, textAlign: 'center' }}>
-            {date.format('dd, D MMM')}
-          </span>
-          <Button size="small" icon={<RightOutlined />} onClick={() => setDate(d => d.add(1, 'day'))} />
+        <Title level={4} style={{ margin: 0 }}>{selectedBranchId === 0 ? 'Все филиалы' : branchShortName}</Title>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Switch size="small" checked={slotsVisible} onChange={setSlotsVisible} />
+            <span style={{ fontSize: 12, color: '#8c8c8c' }}>Слоты</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Button size="small" icon={<LeftOutlined />} onClick={() => setDate(d => d.subtract(1, 'day'))} />
+            <DatePicker
+              value={date}
+              onChange={(d) => d && setDate(d.startOf('day'))}
+              format="dd, D MMM"
+              allowClear={false}
+              style={{ width: 140, textAlign: 'center', fontWeight: 500 }}
+              size="small"
+            />
+            <Button size="small" icon={<RightOutlined />} onClick={() => setDate(d => d.add(1, 'day'))} />
+          </div>
         </div>
       </div>
 
@@ -506,7 +594,7 @@ export default function CalendarPage() {
         <Empty description="Нет залов для выбранного филиала" />
       ) : (
         <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: GRID_TOTAL * CELL_W + ROOM_COL }}>
+          <div style={{ minWidth: gridTotal * CELL_W + ROOM_COL }}>
             {/* Date row */}
             <div style={{ display: 'flex' }}>
               <div style={{ width: ROOM_COL, flexShrink: 0 }} />
@@ -518,7 +606,7 @@ export default function CalendarPage() {
                 {date.format('dd, D MMMM')}
               </div>
               <div style={{
-                width: (GRID_TOTAL - todayHoursCount) * CELL_W, flexShrink: 0, textAlign: 'center', padding: '4px 0',
+                width: (gridTotal - todayHoursCount) * CELL_W, flexShrink: 0, textAlign: 'center', padding: '4px 0',
                 fontWeight: 600, fontSize: 13, color: '#666', backgroundColor: '#FAFAFA',
                 borderBottom: '2px solid #d9d9d9', borderRadius: '6px 6px 0 0',
               }}>
@@ -546,97 +634,182 @@ export default function CalendarPage() {
               })}
             </div>
 
-            {/* Room rows */}
-            {rooms.map((room: any) => {
-              const slots = roomSlots[room.id] || [];
-              return (
-                <div key={room.id} style={{ display: 'flex', borderBottom: '1px solid #f5f5f5', alignItems: 'stretch' }}>
-                  <div style={{ width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0' }}>
-                    <div style={{ fontWeight: 600, fontSize: 12, lineHeight: '16px' }}>{room.name}</div>
-                    <div style={{ fontWeight: 600, fontSize: 11, color: '#E36FA8', lineHeight: '14px' }}>
-                      {CATEGORY_LABELS[room.category] || room.category}
+            {/* Room rows — grouped by branch when "Все" */}
+            {(() => {
+              // Group rooms by branch when viewing all
+              const groupedRooms: { branchId: number; branchName: string; rooms: any[] }[] = [];
+              if (selectedBranchId === 0) {
+                const byBranch = new Map<number, any[]>();
+                for (const room of rooms) {
+                  if (!byBranch.has(room.branchId)) byBranch.set(room.branchId, []);
+                  byBranch.get(room.branchId)!.push(room);
+                }
+                for (const [bid, branchRooms] of byBranch) {
+                  const br = branches.find((b: any) => b.id === bid);
+                  groupedRooms.push({ branchId: bid, branchName: br?.name || `Филиал ${bid}`, rooms: branchRooms });
+                }
+              } else {
+                groupedRooms.push({ branchId: selectedBranchId!, branchName: '', rooms });
+              }
+
+              return groupedRooms.map((group, gi) => (
+                <div key={group.branchId}>
+                  {selectedBranchId === 0 && (
+                    <div style={{
+                      display: 'flex',
+                      padding: '8px 12px',
+                      backgroundColor: '#E36FA8',
+                      borderTop: gi > 0 ? '3px solid #fff' : 'none',
+                    }}>
+                      <div style={{ width: ROOM_COL, flexShrink: 0, fontWeight: 700, fontSize: 13, color: '#fff' }}>
+                        {group.branchName.replace(/^Харизма\s+/, '')}
+                      </div>
+                      <div style={{ flex: 1, fontWeight: 500, fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>
+                        {group.rooms.length} {group.rooms.length === 1 ? 'зал' : group.rooms.length < 5 ? 'зала' : 'залов'}
+                      </div>
                     </div>
-                    <div style={{ color: '#8c8c8c', fontSize: 10, marginTop: 2 }}>до {room.capacityMax} чел.</div>
-                  </div>
-
-                  <div style={{ position: 'relative', display: 'flex', flex: 1 }}>
-                    {slots.map((slot, idx) => (
-                      <SlotFrame
-                        key={idx}
-                        slot={slot}
-                        index={idx}
-                        roomId={room.id}
-                        allSlots={slots}
-                        onMove={handleSlotChange}
-                        onResize={handleSlotChange}
-                        onSlotClick={handleSlotClick}
-                      />
-                    ))}
-
-                    {gridIndices.map(gi => {
-                      const booking = getBookingForCell(room.id, gi);
-                      const price = getPrice(room.category, gi);
-                      const isMidnight = gi === todayHoursCount;
-                      const gap = isGapCell(room.id, gi);
-                      const closed = isCellClosed(gi);
-
-                      if (closed) {
-                        return (
-                          <div key={gi} style={{
-                            width: CELL_W, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            padding: '4px 2px', zIndex: 1,
-                            borderLeft: isMidnight ? '2px solid #d9d9d9' : 'none',
-                          }}>
-                            <div style={{
-                              width: '100%', height: '100%', borderRadius: 4, minHeight: 36,
-                              backgroundColor: '#f5f5f5', border: '1px solid #e8e8e8',
-                            }} />
-                          </div>
-                        );
-                      }
-
-                      if (booking) {
-                        return (
-                          <div key={gi} onClick={() => { setPrefill(undefined); setSelectedBooking(booking); setShowForm(true); }} style={{
-                            width: CELL_W, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            padding: '4px 2px', cursor: 'pointer', zIndex: 1,
-                            borderLeft: isMidnight ? '2px solid #d9d9d9' : 'none',
-                          }}>
-                            <div style={{
-                              width: '100%', height: '100%', borderRadius: 4, minHeight: 36,
-                              backgroundColor: STATUS_COLORS[booking.status] || '#ddd',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 9, fontWeight: 500, color: '#333', border: '1px solid rgba(0,0,0,0.08)',
-                            }}>
-                              {booking.guestName?.split(' ')[0]}
-                            </div>
-                          </div>
-                        );
-                      }
-
+                  )}
+                  {(() => {
+                    const mainRooms = group.rooms.filter((r: any) => r.category !== 'common');
+                    const commonRooms = group.rooms.filter((r: any) => r.category === 'common');
+                    const renderRoom = (room: any) => {
+                      const isCommon = room.category === 'common';
+                      const slots = roomSlots[room.id] || [];
+                      const roomBookings = getRoomBookings(room.id);
                       return (
-                        <div key={gi} onClick={() => handleCellClick(room.id, gi)} style={{
-                          width: CELL_W, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          padding: '4px 2px', cursor: 'pointer', zIndex: 1,
-                          borderLeft: isMidnight ? '2px solid #d9d9d9' : 'none',
-                        }}>
+                        <div key={room.id} style={{ display: 'flex', borderBottom: '1px solid #f5f5f5', alignItems: 'stretch' }}>
                           <div style={{
-                            width: '100%', height: '100%', borderRadius: 4, minHeight: 36,
-                            backgroundColor: gap ? '#FFF8E1' : '#F0FFF0',
-                            border: gap ? '1px dashed #FFD54F' : '1px solid #C8E6C9',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: gap ? 8 : 10, fontWeight: 500,
-                            color: gap ? '#BF8F00' : '#555',
+                            width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0',
+                            backgroundColor: isCommon ? '#F5F0FF' : undefined,
                           }}>
-                            {gap ? 'gap' : `${(price / 1000).toFixed(1)}k`}
+                            <div style={{ fontWeight: 600, fontSize: 12, lineHeight: '16px' }}>{room.name}</div>
+                            <div style={{ fontWeight: 600, fontSize: 11, color: isCommon ? '#722ED1' : '#E36FA8', lineHeight: '14px' }}>
+                              {CATEGORY_LABELS[room.category] || room.category}
+                            </div>
+                            <div style={{ color: '#8c8c8c', fontSize: 10, marginTop: 2 }}>до {room.capacityMax} чел.</div>
+                          </div>
+
+                          <div style={{ position: 'relative', display: 'flex', flex: 1 }}>
+                            {/* Slot frames — only for non-common rooms */}
+                            {!isCommon && slotsVisible && slots.map((slot, idx) => {
+                              const overlapsBooking = roomBookings.some((b: any) =>
+                                b.gridFrom < slot.to && b.gridTo > slot.from
+                              );
+                              if (overlapsBooking) return null;
+                              // Skip slots that fall in closed hours
+                              const slotInClosed = isCellClosed(Math.floor(slot.from));
+                              if (slotInClosed) return null;
+                              return (
+                                <SlotFrame
+                                  key={idx}
+                                  slot={slot}
+                                  index={idx}
+                                  roomId={room.id}
+                                  allSlots={slots}
+                                  onMove={handleSlotChange}
+                                  onResize={handleSlotChange}
+                                  onSlotClick={handleSlotClick}
+                                  gridTotal={gridTotal}
+                                  gridToTimeFn={gridToTime}
+                                />
+                              );
+                            })}
+
+                            {/* Background cells */}
+                            {gridIndices.map(gi => {
+                              const price = getPrice(room.category, gi);
+                              const isMidnight = gi === todayHoursCount;
+                              const gap = !isCommon && slotsVisible && isGapCell(room.id, gi);
+                              const closed = isCellClosed(gi);
+
+                              return (
+                                <div key={gi} onClick={() => !closed && handleCellClick(room.id, gi)} style={{
+                                  width: CELL_W, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  padding: '4px 2px', cursor: closed ? 'default' : 'pointer', zIndex: 1,
+                                  borderLeft: isMidnight ? '2px solid #d9d9d9' : 'none',
+                                }}>
+                                  <div style={{
+                                    width: '100%', height: '100%', borderRadius: 4, minHeight: 36,
+                                    backgroundColor: closed ? '#e8e8e8' : gap ? '#FFF8E1' : isCommon ? '#F5F0FF' : '#F0FFF0',
+                                    border: closed ? '1px solid #bfbfbf' : gap ? '1px dashed #FFD54F' : isCommon ? '1px solid #D3ADF7' : '1px solid #C8E6C9',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: closed ? 8 : gap ? 8 : 10, fontWeight: closed ? 600 : 500,
+                                    color: closed ? '#999' : gap ? '#BF8F00' : isCommon ? '#722ED1' : '#555',
+                                    backgroundImage: closed ? 'repeating-linear-gradient(135deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 5px)' : undefined,
+                                  }}>
+                                    {closed ? 'закр.' : gap ? 'gap' : `${(price / 1000).toFixed(1)}k`}
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {/* Booking overlays */}
+                            {roomBookings.map((b: any) => {
+                              const left = b.gridFrom * CELL_W + 2;
+                              const width = (b.gridTo - b.gridFrom) * CELL_W - 4;
+                              const bStart = dayjs(b.startTime);
+                              const bEnd = dayjs(b.endTime);
+                              return (
+                                <div
+                                  key={b.id}
+                                  onClick={() => { setPrefill(undefined); setSelectedBooking(b); setShowForm(true); }}
+                                  style={{
+                                    position: 'absolute',
+                                    left,
+                                    width,
+                                    top: 4,
+                                    bottom: 4,
+                                    borderRadius: 4,
+                                    backgroundColor: STATUS_COLORS[b.status] || '#ddd',
+                                    border: '1px solid rgba(0,0,0,0.1)',
+                                    cursor: 'pointer',
+                                    zIndex: 2,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    overflow: 'hidden',
+                                    padding: '0 2px',
+                                  }}
+                                >
+                                  <span style={{ fontSize: 10, fontWeight: 600, color: '#333', lineHeight: '13px', whiteSpace: 'nowrap' }}>
+                                    {b.guestName?.split(' ')[0]}
+                                  </span>
+                                  <span style={{ fontSize: 8, color: '#555', lineHeight: '11px', whiteSpace: 'nowrap' }}>
+                                    {bStart.format('HH:mm')}–{bEnd.format('HH:mm')}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
+                    };
+                    return (
+                      <>
+                        {mainRooms.map(renderRoom)}
+                        {commonRooms.length > 0 && (
+                          <>
+                            <div style={{
+                              display: 'flex', padding: '5px 12px',
+                              backgroundColor: '#F5F0FF', borderTop: '2px solid #D3ADF7', borderBottom: '1px solid #D3ADF7',
+                            }}>
+                              <div style={{ width: ROOM_COL, flexShrink: 0, fontWeight: 700, fontSize: 12, color: '#722ED1' }}>
+                                Общие залы
+                              </div>
+                              <div style={{ flex: 1, fontWeight: 500, fontSize: 11, color: '#B37FEB' }}>
+                                {commonRooms.length} {commonRooms.length === 1 ? 'зал' : commonRooms.length < 5 ? 'зала' : 'залов'}
+                              </div>
+                            </div>
+                            {commonRooms.map(renderRoom)}
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
-              );
-            })}
+              ));
+            })()}
           </div>
         </div>
       )}

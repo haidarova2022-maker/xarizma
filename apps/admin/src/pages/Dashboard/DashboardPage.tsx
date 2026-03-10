@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, Typography, Progress } from 'antd';
+import { Card, Typography, Progress, DatePicker } from 'antd';
 import {
   CalendarOutlined,
   TeamOutlined,
@@ -339,44 +339,45 @@ export default function DashboardPage() {
   const { selectedBranchId, branches } = useBranchStore();
   const [stats, setStats] = useState<DashStats | null>(null);
   const [branchLoads, setBranchLoads] = useState<BranchLoad[]>([]);
+  const [loadRange, setLoadRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs(), dayjs()]);
 
   useEffect(() => {
-    if (!selectedBranchId) return;
-    getDashboardStats(selectedBranchId)
+    if (selectedBranchId === null) return;
+    getDashboardStats(selectedBranchId || undefined)
       .then(({ data }) => setStats(data))
       .catch(() => {});
   }, [selectedBranchId]);
 
   useEffect(() => {
     if (!branches.length) return;
-    const today = dayjs().startOf('day').toISOString();
-    const tomorrow = dayjs().endOf('day').toISOString();
+    const dateFrom = loadRange[0].startOf('day').toISOString();
+    const dateTo = loadRange[1].endOf('day').toISOString();
+    const days = loadRange[1].diff(loadRange[0], 'day') + 1;
 
     Promise.all([
-      getBookings({ dateFrom: today, dateTo: tomorrow }),
+      getBookings({ dateFrom, dateTo }),
       getRooms(),
       getSlotConfig(),
     ]).then(([bookingsRes, roomsRes, cfgRes]) => {
       const allBookings = bookingsRes.data.filter((b: any) => b.status !== 'cancelled');
       const allRooms = roomsRes.data;
 
-      // Calculate slots per day from config
       const cfg = cfgRes.data;
       const step = cfg.slotDuration + cfg.gapHours;
-      const operatingHours = 16; // 9:00 → 01:00
+      const operatingHours = 16;
       const slotsPerDay = Math.floor(operatingHours / step);
 
       const loads: BranchLoad[] = branches.map((br: any) => {
         const count = allBookings.filter((b: any) => b.branchId === br.id).length;
         const roomCount = allRooms.filter((r: any) => r.branchId === br.id).length;
-        const totalSlots = roomCount * slotsPerDay;
+        const totalSlots = roomCount * slotsPerDay * days;
         const percent = totalSlots > 0 ? Math.min(100, Math.round((count / totalSlots) * 100)) : 0;
         const shortName = br.name.replace(/^Харизма\s+/, '');
         return { branchId: br.id, name: shortName, bookings: count, totalSlots, percent };
       });
       setBranchLoads(loads);
     }).catch(() => {});
-  }, [branches]);
+  }, [branches, loadRange]);
 
   const branch = branches.find((b: any) => b.id === selectedBranchId);
 
@@ -451,7 +452,18 @@ export default function DashboardPage() {
 
       {/* Branch load */}
       <Card>
-        <Title level={4} style={{ marginBottom: 20 }}>Загрузка филиалов</Title>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <Title level={4} style={{ margin: 0 }}>Загрузка залов</Title>
+          <DatePicker.RangePicker
+            value={loadRange}
+            onChange={(dates) => {
+              if (dates && dates[0] && dates[1]) setLoadRange([dates[0], dates[1]]);
+            }}
+            format="DD.MM.YYYY"
+            allowClear={false}
+            style={{ width: 260 }}
+          />
+        </div>
         {branchLoads.map((bl) => (
           <div key={bl.branchId} style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>

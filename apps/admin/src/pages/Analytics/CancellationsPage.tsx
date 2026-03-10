@@ -41,9 +41,9 @@ export default function CancellationsPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!selectedBranchId) return;
+    if (selectedBranchId === null) return;
     setLoading(true);
-    getCancellationAnalytics(selectedBranchId)
+    getCancellationAnalytics(selectedBranchId || undefined)
       .then(({ data }) => setData(data))
       .catch(() => {})
       .finally(() => setLoading(false));

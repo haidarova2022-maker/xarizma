@@ -27,6 +27,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   vibe: 'Вайб',
   flex: 'Флекс',
   full_gas: 'Полный газ',
+  common: 'Общий зал',
 };
 
 export default function WaitlistPage() {
@@ -35,10 +36,12 @@ export default function WaitlistPage() {
   const [loading, setLoading] = useState(false);
 
   const loadWaitlist = async () => {
-    if (!selectedBranchId) return;
+    if (selectedBranchId === null) return;
     setLoading(true);
     try {
-      const { data } = await getWaitlist({ branchId: selectedBranchId });
+      const params: any = {};
+      if (selectedBranchId) params.branchId = selectedBranchId;
+      const { data } = await getWaitlist(params);
       setEntries(data);
     } catch {} finally {
       setLoading(false);

@@ -82,8 +82,9 @@ mock.onGet('/bookings/calendar').reply((config) => {
   const { branchId, dateFrom, dateTo } = config.params || {};
   const from = new Date(dateFrom);
   const to = new Date(dateTo);
+  const bid = branchId ? Number(branchId) : null;
   const filtered = bookings
-    .filter(b => b.branchId === Number(branchId))
+    .filter(b => !bid || b.branchId === bid)
     .filter(b => new Date(b.startTime) >= from && new Date(b.startTime) <= to)
     .map(b => {
       const room = rooms.find(r => r.id === b.roomId);
@@ -107,14 +108,32 @@ mock.onGet('/bookings').reply((config) => {
   if (p.source) filtered = filtered.filter(b => b.source === p.source);
   if (p.dateFrom) filtered = filtered.filter(b => new Date(b.startTime) >= new Date(p.dateFrom));
   if (p.dateTo) filtered = filtered.filter(b => new Date(b.startTime) <= new Date(p.dateTo));
+  if (p.phone) {
+    const q = p.phone.replace(/[\s\-\(\)]/g, '');
+    filtered = filtered.filter(b => b.guestPhone.replace(/[\s\-\(\)]/g, '').includes(q));
+  }
   return [200, filtered];
 });
 
 mock.onPost('/bookings').reply((config) => {
   const data = JSON.parse(config.data);
+
+  // Check overlap
+  const newStart = new Date(data.startTime).getTime();
+  const newEnd = new Date(data.endTime).getTime();
+  const overlap = bookings.find(b =>
+    b.roomId === data.roomId &&
+    b.status !== 'cancelled' &&
+    new Date(b.startTime).getTime() < newEnd &&
+    new Date(b.endTime).getTime() > newStart
+  );
+  if (overlap) {
+    return [409, { message: `Зал занят: бронь #${overlap.id} (${overlap.guestName})` }];
+  }
+
   const room = rooms.find(r => r.id === data.roomId);
   const rule = priceRules.find(r => r.category === room?.category);
-  const hours = Math.abs(new Date(data.endTime).getTime() - new Date(data.startTime).getTime()) / 3600000;
+  const hours = Math.abs(newEnd - newStart) / 3600000;
   const basePrice = Math.round((rule?.pricePerHour || 3000) * hours);
 
   let discountAmount = 0;
@@ -133,7 +152,7 @@ mock.onPost('/bookings').reply((config) => {
   const totalPrice = basePrice - discountAmount;
   const b = {
     ...data, id: nextBookingId++,
-    status: data.bookingType === 'walkin' ? 'walkin' : 'new',
+    status: 'preliminary',
     basePrice, discountAmount, totalPrice,
     prepaymentAmount: 0, paymentStatus: 'none',
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -358,7 +377,8 @@ function buildEmptySlots() {
   return raw.map(({ dateObj, ...rest }) => {
     const hours = (parseInt(rest.timeTo.split(':')[0], 10) - parseInt(rest.timeFrom.split(':')[0], 10));
     const pricePerHour = getSlotPrice(rest.category, dateObj, rest.timeFrom);
-    return { ...rest, date: dateObj.toISOString(), pricePerHour, totalPrice: pricePerHour * hours };
+    const room = rooms.find(r => r.name === rest.roomName && r.branchId === rest.branchId);
+    return { ...rest, roomId: room?.id, date: dateObj.toISOString(), pricePerHour, totalPrice: pricePerHour * hours };
   });
 }
 

@@ -11,6 +11,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   vibe: 'Вайб',
   flex: 'Флекс',
   full_gas: 'Полный газ',
+  common: 'Общий зал',
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -18,6 +19,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   vibe: 'green',
   flex: 'orange',
   full_gas: 'red',
+  common: 'default',
 };
 
 interface RoomData {
@@ -37,9 +39,9 @@ export default function RoomAnalyticsPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!selectedBranchId) return;
+    if (selectedBranchId === null) return;
     setLoading(true);
-    getRoomAnalytics(selectedBranchId)
+    getRoomAnalytics(selectedBranchId || undefined)
       .then(({ data }) => setData(data))
       .catch(() => {})
       .finally(() => setLoading(false));

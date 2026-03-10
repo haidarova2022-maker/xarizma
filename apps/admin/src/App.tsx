@@ -6,7 +6,6 @@ import AppLayout from './components/Layout/AppLayout';
 import LoginPage from './pages/Login/LoginPage';
 import DashboardPage from './pages/Dashboard/DashboardPage';
 import CalendarPage from './pages/Calendar/CalendarPage';
-import CalendarSimplePage from './pages/Calendar/CalendarSimplePage';
 import BookingsPage from './pages/Bookings/BookingsPage';
 import BranchesPage from './pages/Branches/BranchesPage';
 import RoomsPage from './pages/Rooms/RoomsPage';
@@ -55,7 +54,6 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/calendar" element={<CalendarPage />} />
-                <Route path="/calendar-simple" element={<CalendarSimplePage />} />
                 <Route path="/bookings" element={<BookingsPage />} />
                 <Route path="/empty-slots" element={<EmptySlotsPage />} />
                 <Route path="/branches" element={<BranchesPage />} />

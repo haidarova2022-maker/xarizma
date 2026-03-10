@@ -10,6 +10,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   vibe: 'Вайб',
   flex: 'Флекс',
   full_gas: 'Полный газ',
+  common: 'Общий зал',
 };
 
 const DAY_TYPE_LABELS: Record<string, string> = {

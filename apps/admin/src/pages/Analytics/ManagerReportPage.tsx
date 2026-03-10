@@ -25,9 +25,9 @@ export default function ManagerReportPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!selectedBranchId) return;
+    if (selectedBranchId === null) return;
     setLoading(true);
-    getManagerAnalytics(selectedBranchId)
+    getManagerAnalytics(selectedBranchId || undefined)
       .then(({ data }) => setData(data))
       .catch(() => {})
       .finally(() => setLoading(false));

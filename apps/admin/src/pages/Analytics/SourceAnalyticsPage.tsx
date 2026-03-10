@@ -36,9 +36,9 @@ export default function SourceAnalyticsPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!selectedBranchId) return;
+    if (selectedBranchId === null) return;
     setLoading(true);
-    getSourceAnalytics(selectedBranchId)
+    getSourceAnalytics(selectedBranchId || undefined)
       .then(({ data }) => setData(data))
       .catch(() => {})
       .finally(() => setLoading(false));

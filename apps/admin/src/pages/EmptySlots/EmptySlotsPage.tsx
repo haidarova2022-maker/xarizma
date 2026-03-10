@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Card, Typography, Badge, Empty, Divider, DatePicker, Button } from 'antd';
-import { ExclamationCircleOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { CalendarOutlined, LeftOutlined, RightOutlined, PlusOutlined } from '@ant-design/icons';
 import { getEmptySlots } from '../../api/client';
 import dayjs, { Dayjs } from 'dayjs';
+import BookingFormModal from '../../components/BookingForm/BookingFormModal';
 
 const { Title, Text } = Typography;
 
@@ -11,10 +12,12 @@ const categoryLabels: Record<string, string> = {
   vibe: 'Вайб',
   flex: 'Флекс',
   full_gas: 'Полный газ',
+  common: 'Общий зал',
 };
 
 interface EmptySlot {
   roomName: string;
+  roomId?: number;
   category: string;
   branchName: string;
   branchId: number;
@@ -29,6 +32,8 @@ export default function EmptySlotsPage() {
   const [slots, setSlots] = useState<EmptySlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState<Dayjs | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [prefill, setPrefill] = useState<{ roomId?: number; date?: Dayjs; timeFrom?: Dayjs; timeTo?: Dayjs } | undefined>();
 
   const loadSlots = useCallback((date?: Dayjs | null) => {
     setLoading(true);
@@ -44,6 +49,19 @@ export default function EmptySlotsPage() {
   const catLabel = (cat: string) => categoryLabels[cat] || cat;
   const formatPrice = (n: number) => new Intl.NumberFormat('ru-RU').format(n);
 
+  const handleBookSlot = (slot: EmptySlot) => {
+    const slotDate = dayjs(slot.date);
+    const [fromH, fromM] = slot.timeFrom.split(':').map(Number);
+    const [toH, toM] = slot.timeTo.split(':').map(Number);
+    setPrefill({
+      roomId: slot.roomId,
+      date: slotDate,
+      timeFrom: slotDate.hour(fromH).minute(fromM),
+      timeTo: slotDate.hour(toH).minute(toM),
+    });
+    setShowForm(true);
+  };
+
   // Group by branch
   const grouped = useMemo(() => {
     const map = new Map<string, EmptySlot[]>();
@@ -57,13 +75,13 @@ export default function EmptySlotsPage() {
 
   return (
     <div>
-      <Title level={3} style={{ marginBottom: 24 }}>Пустые окна</Title>
+      <Title level={3} style={{ marginBottom: 24 }}>Свободные слоты</Title>
 
       <Card loading={loading}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <ExclamationCircleOutlined style={{ fontSize: 20, color: '#FDCB6E' }} />
-            <Text strong style={{ fontSize: 18 }}>Пустые окна</Text>
+            <CalendarOutlined style={{ fontSize: 20, color: '#52c41a' }} />
+            <Text strong style={{ fontSize: 18 }}>Свободные слоты</Text>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -86,13 +104,13 @@ export default function EmptySlotsPage() {
             />
             <Badge
               count={`${slots.length} слотов`}
-              style={{ backgroundColor: '#FFF9E6', color: '#8B7300', fontWeight: 500, fontSize: 13, marginLeft: 8 }}
+              style={{ backgroundColor: '#F6FFED', color: '#389e0d', fontWeight: 500, fontSize: 13, marginLeft: 8 }}
             />
           </div>
         </div>
 
         {slots.length === 0 && !loading && (
-          <Empty description="Нет пустых окон" />
+          <Empty description="Нет свободных слотов" />
         )}
 
         {grouped.map(([branchName, branchSlots], gi) => (
@@ -115,23 +133,23 @@ export default function EmptySlotsPage() {
               <div
                 key={idx}
                 style={{
-                  borderLeft: '3px solid #FDCB6E',
+                  borderLeft: '3px solid #B7EB8F',
                   padding: '14px 20px',
                   borderBottom: idx < branchSlots.length - 1 ? '1px solid #f0f0f0' : 'none',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ flex: 1 }}>
-                    <Text strong style={{ fontSize: 15 }}>{slot.roomName} {catLabel(slot.category)}</Text>
+                    <Text strong style={{ fontSize: 15 }}>{slot.roomName}</Text>
                     <br />
-                    <Text type="secondary" style={{ fontSize: 13 }}>{slot.branchName} · {catLabel(slot.category)}</Text>
+                    <Text type="secondary" style={{ fontSize: 13 }}>{catLabel(slot.category)}</Text>
                   </div>
                   <div style={{ textAlign: 'center', minWidth: 120 }}>
                     <Text strong style={{ fontSize: 14 }}>{formatDate(slot.date)}</Text>
                     <br />
-                    <Text type="secondary" style={{ fontSize: 14 }}>{slot.timeFrom} - {slot.timeTo}</Text>
+                    <Text type="secondary" style={{ fontSize: 14 }}>{slot.timeFrom} – {slot.timeTo}</Text>
                   </div>
-                  <div style={{ textAlign: 'right', minWidth: 120 }}>
+                  <div style={{ textAlign: 'right', minWidth: 100 }}>
                     <Text strong style={{ fontSize: 15, color: '#E36FA8' }}>
                       {formatPrice(slot.totalPrice)} ₽
                     </Text>
@@ -140,12 +158,28 @@ export default function EmptySlotsPage() {
                       {formatPrice(slot.pricePerHour)} ₽/ч
                     </Text>
                   </div>
+                  <Button
+                    type="primary"
+                    size="small"
+                    icon={<PlusOutlined />}
+                    style={{ marginLeft: 16, backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                    onClick={() => handleBookSlot(slot)}
+                  >
+                    Забронировать
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
         ))}
       </Card>
+
+      <BookingFormModal
+        open={showForm}
+        prefill={prefill}
+        onClose={() => setShowForm(false)}
+        onSuccess={() => { setShowForm(false); loadSlots(filterDate); }}
+      />
     </div>
   );
 }

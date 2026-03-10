@@ -6,7 +6,7 @@ interface BranchState {
   selectedBranchId: number | null;
   loading: boolean;
   fetchBranches: () => Promise<void>;
-  selectBranch: (id: number) => void;
+  selectBranch: (id: number | 0) => void;
 }
 
 export const useBranchStore = create<BranchState>((set) => ({
