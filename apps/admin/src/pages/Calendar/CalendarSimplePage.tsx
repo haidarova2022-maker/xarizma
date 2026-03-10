@@ -18,12 +18,9 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  new: '#FFE082',
-  awaiting_payment: '#FFCC80',
-  partially_paid: '#A5D6A7',
-  fully_paid: '#4CAF50',
-  walkin: '#CE93D8',
-  completed: '#81C784',
+  preliminary: '#FFCC80',
+  paid: '#4CAF50',
+  completed: '#64B5F6',
   cancelled: '#EF9A9A',
 };
 
