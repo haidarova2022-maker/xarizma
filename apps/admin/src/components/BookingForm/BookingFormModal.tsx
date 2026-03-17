@@ -3,10 +3,10 @@ import {
   Modal, Form, Input, Select, DatePicker, TimePicker, InputNumber,
   Button, message, Space, Divider, Typography, Tag, Switch, Alert, Timeline,
 } from 'antd';
-import { TagOutlined, CheckCircleFilled, CloseOutlined, SwapOutlined, DragOutlined, HistoryOutlined } from '@ant-design/icons';
+import { TagOutlined, CheckCircleFilled, CloseOutlined, SwapOutlined, DragOutlined, HistoryOutlined, GiftOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useBranchStore } from '../../stores/branch-store';
-import { getRooms, createBooking, updateBooking, calculatePrice, getActivePromos, getCalendar, getBookingHistory } from '../../api/client';
+import { getRooms, createBooking, updateBooking, calculatePrice, getActivePromos, getCalendar, getBookingHistory, getPackages } from '../../api/client';
 
 const { Text, Title } = Typography;
 
@@ -20,6 +20,21 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const fmt = (n: number) => new Intl.NumberFormat('ru-RU').format(n);
+
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  // Normalize: strip leading 8 or 7, always use +7
+  let d = digits;
+  if (d.startsWith('8') && d.length > 1) d = '7' + d.slice(1);
+  if (!d.startsWith('7')) d = '7' + d;
+  // Format: +7 (XXX) XXX-XX-XX
+  const parts = d.slice(1); // digits after 7
+  if (parts.length === 0) return '+7';
+  if (parts.length <= 3) return `+7 (${parts}`;
+  if (parts.length <= 6) return `+7 (${parts.slice(0, 3)}) ${parts.slice(3)}`;
+  if (parts.length <= 8) return `+7 (${parts.slice(0, 3)}) ${parts.slice(3, 6)}-${parts.slice(6)}`;
+  return `+7 (${parts.slice(0, 3)}) ${parts.slice(3, 6)}-${parts.slice(6, 8)}-${parts.slice(8, 10)}`;
+}
 
 const CATEGORY_RANK: Record<string, number> = {
   common: 0,
@@ -72,6 +87,8 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
   const [transferSurcharge, setTransferSurcharge] = useState<number>(0);
   const [applySurcharge, setApplySurcharge] = useState(true);
   const [history, setHistory] = useState<any[]>([]);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [selectedPackageIds, setSelectedPackageIds] = useState<Set<number>>(new Set());
 
   const checkBusyRooms = async () => {
     const values = form.getFieldsValue();
@@ -118,6 +135,7 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
     });
     if (!booking) {
       getActivePromos().then(({ data }) => setPromos(data)).catch(() => {});
+      getPackages().then(({ data }) => setPackages(data.filter((p: any) => p.isActive !== false))).catch(() => {});
     }
     if (booking && !transferBranchId) {
       getBookingHistory(booking.id).then(({ data }) => setHistory(data)).catch(() => setHistory([]));
@@ -173,6 +191,7 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
     setTransferSurcharge(0);
     setApplySurcharge(true);
     setHistory([]);
+    setSelectedPackageIds(new Set());
   }, [booking, open, form]);
 
   const handleWalkinToggle = (checked: boolean) => {
@@ -660,8 +679,10 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
           <Form.Item name="guestName" label="Имя гостя" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="guestPhone" label="Телефон" rules={[{ required: true }]}>
-            <Input placeholder="+7 (___) ___-__-__" />
+          <Form.Item name="guestPhone" label="Телефон" rules={[{ required: true }]}
+            getValueFromEvent={(e) => formatPhone(e.target.value)}
+          >
+            <Input placeholder="+7 (___) ___-__-__" maxLength={18} />
           </Form.Item>
         </div>
 
@@ -805,6 +826,73 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* Additional services */}
+        {!booking && packages.length > 0 && (
+          <div style={{
+            border: '1px solid #e8e8e8',
+            borderRadius: 8,
+            padding: '12px 16px',
+            marginBottom: 16,
+            background: '#F6FFED',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+              <GiftOutlined style={{ color: '#52c41a' }} />
+              <Text strong style={{ fontSize: 14, color: '#52c41a' }}>Доп. услуги</Text>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {packages.map((pkg: any) => {
+                const isSelected = selectedPackageIds.has(pkg.id);
+                return (
+                  <div
+                    key={pkg.id}
+                    onClick={() => {
+                      setSelectedPackageIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(pkg.id)) next.delete(pkg.id); else next.add(pkg.id);
+                        return next;
+                      });
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      border: isSelected ? '2px solid #52c41a' : '1px solid #e8e8e8',
+                      background: isSelected ? '#F6FFED' : '#fff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {isSelected && <CheckCircleFilled style={{ color: '#52c41a', fontSize: 16 }} />}
+                      <div>
+                        <Text strong style={{ fontSize: 13 }}>{pkg.name}</Text>
+                        <div><Text type="secondary" style={{ fontSize: 11 }}>{pkg.description}</Text></div>
+                      </div>
+                    </div>
+                    <Text strong style={{ color: '#52c41a', whiteSpace: 'nowrap' }}>+{fmt(pkg.priceModifier)} ₽</Text>
+                  </div>
+                );
+              })}
+            </div>
+            {selectedPackageIds.size > 0 && price && (
+              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 6, background: '#fff', border: '1px solid #d9f7be' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text type="secondary">Доп. услуги</Text>
+                  <Text>+{fmt(packages.filter((p: any) => selectedPackageIds.has(p.id)).reduce((s: number, p: any) => s + p.priceModifier, 0))} ₽</Text>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                  <Text strong>Итого с услугами</Text>
+                  <Text strong style={{ fontSize: 16, color: '#E36FA8' }}>
+                    {fmt((appliedPromo ? finalPrice : (price?.basePrice || 0)) + packages.filter((p: any) => selectedPackageIds.has(p.id)).reduce((s: number, p: any) => s + p.priceModifier, 0))} ₽
+                  </Text>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
