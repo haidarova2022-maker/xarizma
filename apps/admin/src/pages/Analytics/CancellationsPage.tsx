@@ -10,8 +10,8 @@ const { Title, Text } = Typography;
 
 const SOURCE_LABELS: Record<string, string> = {
   widget: 'Виджет',
-  admin: 'Админ',
-  phone: 'Телефон',
+  chat: 'Менеджер (чат)',
+  phone: 'Менеджер (тел.)',
   walkin: 'Walk-in',
 };
 

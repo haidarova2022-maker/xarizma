@@ -25,14 +25,14 @@ const STATUS_LABELS: Record<string, string> = {
 
 const SOURCE_LABELS: Record<string, string> = {
   widget: 'Виджет',
-  admin: 'Админ',
-  phone: 'Телефон',
+  chat: 'Менеджер (чат)',
+  phone: 'Менеджер (тел.)',
   walkin: 'Walk-in',
 };
 
 const SOURCE_COLORS: Record<string, string> = {
   widget: 'blue',
-  admin: 'default',
+  chat: 'default',
   phone: 'cyan',
   walkin: 'purple',
 };

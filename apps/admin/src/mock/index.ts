@@ -492,16 +492,26 @@ mock.onGet('/analytics/sources').reply((config) => {
     return new Date(b.startTime) >= monthStart;
   });
 
-  const sources = ['widget', 'admin', 'phone', 'walkin'];
-  const data = sources.map(source => {
-    const sb = active.filter((b: any) => b.source === source);
-    const count = sb.length;
-    const revenue = sb.reduce((s: number, b: any) => s + (b.totalPrice || 0), 0);
+  const calcSource = (key: string, items: any[]) => {
+    const count = items.length;
+    const revenue = items.reduce((s: number, b: any) => s + (b.totalPrice || 0), 0);
     const avgCheck = count > 0 ? Math.round(revenue / count) : 0;
     const lastYear = Math.max(1, Math.round(count * 0.8));
     const lfl = Math.round(((count - lastYear) / lastYear) * 100);
-    return { source, bookings: count, revenue, avgCheck, lfl, lastYearBookings: lastYear };
-  });
+    return { source: key, bookings: count, revenue, avgCheck, lfl, lastYearBookings: lastYear };
+  };
+
+  const widgetB = active.filter((b: any) => b.source === 'widget');
+  const chatB = active.filter((b: any) => b.source === 'chat');
+  const phoneB = active.filter((b: any) => b.source === 'phone');
+  const walkinB = active.filter((b: any) => b.source === 'walkin');
+  const managerB = [...chatB, ...phoneB];
+
+  const data = [
+    calcSource('widget', widgetB),
+    { ...calcSource('manager', managerB), children: [calcSource('chat', chatB), calcSource('phone', phoneB)] },
+    calcSource('walkin', walkinB),
+  ];
 
   return [200, data];
 });
@@ -518,23 +528,38 @@ mock.onGet('/analytics/managers').reply((config) => {
     return new Date(b.startTime) >= monthStart;
   });
 
-  const managerIds = [...new Set(active.map((b: any) => b.createdBy).filter(Boolean))];
+  // All bookings (including cancelled) for conversion calc
+  const allManagerBookings = bookings.filter((b: any) => {
+    if (branchId && b.branchId !== branchId) return false;
+    return new Date(b.startTime) >= monthStart;
+  });
+
+  const managerIds = [...new Set(allManagerBookings.map((b: any) => b.createdBy).filter(Boolean))];
   const data = managerIds.map(mId => {
     const user = users.find(u => u.id === mId);
-    const mb = active.filter((b: any) => b.createdBy === mId);
+    const allMb = allManagerBookings.filter((b: any) => b.createdBy === mId);
+    const mb = allMb.filter((b: any) => b.status !== 'cancelled');
     const count = mb.length;
+    const totalInquiries = allMb.length;
     const revenue = mb.reduce((s: number, b: any) => s + (b.totalPrice || 0), 0);
     const avgCheck = count > 0 ? Math.round(revenue / count) : 0;
     const plan = Math.round(revenue * 1.3);
     const planPct = plan > 0 ? Math.round((revenue / plan) * 100) : 0;
+    const conversion = totalInquiries > 0 ? Math.round((count / totalInquiries) * 100) : 0;
+    const motivationPct = planPct >= 100 ? 3.5 : 2.5;
+    const motivation = Math.round(revenue * motivationPct / 100);
     return {
       managerId: mId,
       managerName: user?.name || 'Неизвестный',
       bookings: count,
+      totalInquiries,
+      conversion,
       revenue,
       avgCheck,
       plan,
       planPct,
+      motivationPct,
+      motivation,
     };
   }).sort((a, b) => b.revenue - a.revenue);
 
@@ -613,7 +638,7 @@ mock.onGet('/analytics/cancellations').reply((config) => {
     .sort((a, b) => b.count - a.count);
 
   // Source breakdown
-  const sources = ['widget', 'admin', 'phone', 'walkin'];
+  const sources = ['widget', 'chat', 'phone', 'walkin'];
   const sourceBreakdown = sources.map(source => {
     const total = monthAll.filter((b: any) => b.source === source).length;
     const canc = cancelled.filter((b: any) => b.source === source).length;

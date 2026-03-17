@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Typography, Card, Table, Tag } from 'antd';
-import { ShopOutlined } from '@ant-design/icons';
+import { ShopOutlined, PhoneOutlined, MessageOutlined } from '@ant-design/icons';
 import { useBranchStore } from '../../stores/branch-store';
 import { getSourceAnalytics } from '../../api/client';
 import { KpiCard, LflBadge, fmt } from '../../components/shared/KpiCard';
@@ -9,14 +9,16 @@ const { Title, Text } = Typography;
 
 const SOURCE_LABELS: Record<string, string> = {
   widget: 'Виджет',
-  admin: 'Админ',
+  manager: 'Менеджер',
+  chat: 'Чат',
   phone: 'Телефон',
   walkin: 'Walk-in',
 };
 
 const SOURCE_COLORS: Record<string, string> = {
   widget: '#49BCCB',
-  admin: '#E36FA8',
+  manager: '#E36FA8',
+  chat: '#E36FA8',
   phone: '#FDCB6E',
   walkin: '#00B894',
 };
@@ -28,6 +30,7 @@ interface SourceData {
   avgCheck: number;
   lfl: number;
   lastYearBookings: number;
+  children?: SourceData[];
 }
 
 export default function SourceAnalyticsPage() {
@@ -52,11 +55,16 @@ export default function SourceAnalyticsPage() {
       title: 'Источник',
       dataIndex: 'source',
       key: 'source',
-      render: (s: string) => (
-        <Tag color={SOURCE_COLORS[s] || 'default'} style={{ fontWeight: 600 }}>
-          {SOURCE_LABELS[s] || s}
-        </Tag>
-      ),
+      render: (s: string) => {
+        const icon = s === 'chat' ? <MessageOutlined style={{ marginRight: 4 }} />
+          : s === 'phone' ? <PhoneOutlined style={{ marginRight: 4 }} />
+          : null;
+        return (
+          <Tag color={SOURCE_COLORS[s] || 'default'} style={{ fontWeight: 600 }}>
+            {icon}{SOURCE_LABELS[s] || s}
+          </Tag>
+        );
+      },
     },
     { title: 'Бронирований', dataIndex: 'bookings', key: 'bookings' },
     {
@@ -115,32 +123,62 @@ export default function SourceAnalyticsPage() {
         {data.map(d => {
           const pct = Math.max((d.revenue / maxRevenue) * 100, 2);
           return (
-            <div key={d.source} style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <Text style={{ fontWeight: 500 }}>{SOURCE_LABELS[d.source] || d.source}</Text>
-                <Text strong>{fmt(d.revenue)} ₽</Text>
+            <div key={d.source}>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Text style={{ fontWeight: 500 }}>{SOURCE_LABELS[d.source] || d.source}</Text>
+                  <Text strong>{fmt(d.revenue)} ₽</Text>
+                </div>
+                <div style={{ height: 24, borderRadius: 12, backgroundColor: '#f0f0f0', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${pct}%`,
+                    borderRadius: 12,
+                    backgroundColor: SOURCE_COLORS[d.source] || '#999',
+                    transition: 'width 0.5s ease',
+                  }} />
+                </div>
               </div>
-              <div style={{ height: 24, borderRadius: 12, backgroundColor: '#f0f0f0', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${pct}%`,
-                  borderRadius: 12,
-                  backgroundColor: SOURCE_COLORS[d.source] || '#999',
-                  transition: 'width 0.5s ease',
-                }} />
-              </div>
+              {/* Sub-sources for manager */}
+              {d.children && d.children.map(child => {
+                const childPct = Math.max((child.revenue / maxRevenue) * 100, 2);
+                const icon = child.source === 'chat' ? '💬' : '📞';
+                return (
+                  <div key={child.source} style={{ marginBottom: 10, paddingLeft: 24 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <Text style={{ fontSize: 13, color: '#666' }}>{icon} {SOURCE_LABELS[child.source] || child.source}</Text>
+                      <Text style={{ fontSize: 13 }}>{fmt(child.revenue)} ₽</Text>
+                    </div>
+                    <div style={{ height: 16, borderRadius: 8, backgroundColor: '#f5f5f5', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${childPct}%`,
+                        borderRadius: 8,
+                        backgroundColor: SOURCE_COLORS[child.source] || '#ccc',
+                        opacity: 0.7,
+                        transition: 'width 0.5s ease',
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
         })}
       </Card>
 
-      {/* Table */}
+      {/* Table with expandable manager row */}
       <Card loading={loading}>
         <Table
           columns={columns}
           dataSource={data}
           rowKey="source"
           pagination={false}
+          expandable={{
+            childrenColumnName: 'children',
+            defaultExpandAllRows: true,
+            indentSize: 24,
+          }}
         />
       </Card>
     </div>

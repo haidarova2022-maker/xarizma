@@ -11,10 +11,14 @@ interface ManagerData {
   managerId: number;
   managerName: string;
   bookings: number;
+  totalInquiries: number;
+  conversion: number;
   revenue: number;
   avgCheck: number;
   plan: number;
   planPct: number;
+  motivationPct: number;
+  motivation: number;
 }
 
 const MEDALS = ['', '#FFD700', '#C0C0C0', '#CD7F32'];
@@ -64,9 +68,21 @@ export default function ManagerReportPage() {
     },
     {
       title: 'Бронирований',
-      dataIndex: 'bookings',
       key: 'bookings',
-      render: (v: number) => <Tag>{v}</Tag>,
+      render: (_: any, r: ManagerData) => (
+        <span>
+          <Tag>{r.bookings}</Tag>
+          <Text type="secondary" style={{ fontSize: 12 }}> из {r.totalInquiries}</Text>
+        </span>
+      ),
+    },
+    {
+      title: 'Конверсия',
+      dataIndex: 'conversion',
+      key: 'conversion',
+      render: (v: number) => (
+        <Tag color={v >= 80 ? 'green' : v >= 60 ? 'orange' : 'red'}>{v}%</Tag>
+      ),
     },
     {
       title: 'Выручка',
@@ -104,6 +120,20 @@ export default function ManagerReportPage() {
         <Tag color={v >= 100 ? 'green' : v >= 70 ? 'orange' : 'red'}>
           {v}%
         </Tag>
+      ),
+    },
+    {
+      title: 'Мотивация',
+      key: 'motivation',
+      render: (_: any, r: ManagerData) => (
+        <div>
+          <Text strong>{fmt(r.motivation)} ₽</Text>
+          <div>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {r.motivationPct}% от продаж
+            </Text>
+          </div>
+        </div>
       ),
     },
   ];

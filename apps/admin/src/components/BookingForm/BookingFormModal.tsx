@@ -152,7 +152,7 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
       setAppliedPromo(null);
       form.setFieldsValue({
         bookingType: 'advance',
-        source: 'admin',
+        source: 'chat',
         ...(prefill?.roomId ? { roomId: prefill.roomId } : {}),
         ...(prefill?.date ? { date: prefill.date } : {}),
         ...(prefill?.timeFrom ? { timeFrom: prefill.timeFrom } : {}),
@@ -301,7 +301,7 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
           guestPhone: values.guestPhone,
           guestEmail: values.guestEmail,
           guestComment: values.guestComment,
-          source: isWalkin ? 'walkin' : 'admin',
+          source: isWalkin ? 'walkin' : 'chat',
           ...(appliedPromo ? { promoCodeId: appliedPromo.id } : {}),
         });
         message.success(isWalkin ? 'Ситуативная бронь создана' : 'Бронирование создано');
