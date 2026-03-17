@@ -210,11 +210,11 @@ export default function CalendarSimplePage() {
       ) : rooms.length === 0 ? (
         <Empty description="Нет залов для выбранного филиала" />
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto', position: 'relative' }}>
           <div style={{ minWidth: GRID_TOTAL * CELL_W + ROOM_COL }}>
-            {/* Date row */}
-            <div style={{ display: 'flex' }}>
-              <div style={{ width: ROOM_COL, flexShrink: 0 }} />
+            {/* Date row — sticky top */}
+            <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, backgroundColor: '#fff' }}>
+              <div style={{ width: ROOM_COL, flexShrink: 0, position: 'sticky', left: 0, zIndex: 13, backgroundColor: '#fff' }} />
               <div style={{
                 width: todayHoursCount * CELL_W, flexShrink: 0, textAlign: 'center', padding: '4px 0',
                 fontWeight: 600, fontSize: 13, color: '#333', backgroundColor: '#F9F8FF',
@@ -231,9 +231,9 @@ export default function CalendarSimplePage() {
               </div>
             </div>
 
-            {/* Hours row */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #e8e8e8' }}>
-              <div style={{ width: ROOM_COL, flexShrink: 0, padding: '6px 8px', fontSize: 11, color: '#8c8c8c', fontWeight: 500 }}>
+            {/* Hours row — sticky top below date row */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #e8e8e8', position: 'sticky', top: 28, zIndex: 12, backgroundColor: '#fff' }}>
+              <div style={{ width: ROOM_COL, flexShrink: 0, padding: '6px 8px', fontSize: 11, color: '#8c8c8c', fontWeight: 500, position: 'sticky', left: 0, zIndex: 13, backgroundColor: '#fff' }}>
                 Зал
               </div>
               {gridIndices.map(gi => {
@@ -243,7 +243,7 @@ export default function CalendarSimplePage() {
                     width: CELL_W, flexShrink: 0, textAlign: 'center', padding: '6px 0',
                     fontSize: 10, color: closed ? '#d9d9d9' : '#8c8c8c', fontWeight: 500,
                     borderLeft: gi === todayHoursCount ? '2px solid #d9d9d9' : 'none',
-                    backgroundColor: closed ? '#fafafa' : undefined,
+                    backgroundColor: closed ? '#fafafa' : '#fff',
                   }}>
                     {String(gridToHour(gi)).padStart(2, '0')}
                   </div>
@@ -254,9 +254,10 @@ export default function CalendarSimplePage() {
             {/* Room rows */}
             {rooms.map((room: any) => {
               const roomBookings = getRoomBookings(room.id);
+              const roomBranch = branches.find((b: any) => b.id === room.branchId);
               return (
                 <div key={room.id} style={{ display: 'flex', borderBottom: '1px solid #f5f5f5', alignItems: 'stretch' }}>
-                  <div style={{ width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0' }}>
+                  <div style={{ width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0', position: 'sticky', left: 0, zIndex: 5, backgroundColor: '#fff' }}>
                     <div style={{ fontWeight: 600, fontSize: 12, lineHeight: '16px' }}>{room.name}</div>
                     <div style={{ fontWeight: 600, fontSize: 11, color: '#E36FA8', lineHeight: '14px' }}>
                       {CATEGORY_LABELS[room.category] || room.category}
@@ -297,6 +298,7 @@ export default function CalendarSimplePage() {
                       const width = (b.gridTo - b.gridFrom) * CELL_W - 4;
                       const bStart = dayjs(b.startTime);
                       const bEnd = dayjs(b.endTime);
+                      const bookingBranch = branches.find((br: any) => br.id === b.branchId);
                       return (
                         <div
                           key={b.id}
@@ -326,6 +328,11 @@ export default function CalendarSimplePage() {
                           <span style={{ fontSize: 8, color: '#555', lineHeight: '11px', whiteSpace: 'nowrap' }}>
                             {bStart.format('HH:mm')}–{bEnd.format('HH:mm')}
                           </span>
+                          {bookingBranch?.address && width > 100 && (
+                            <span style={{ fontSize: 7, color: '#666', lineHeight: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+                              {bookingBranch.address}
+                            </span>
+                          )}
                         </div>
                       );
                     })}

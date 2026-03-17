@@ -10,6 +10,21 @@ const mock = new MockAdapter(api, { delayResponse: 200 });
 
 const adminUser = { id: 1, email: 'admin@xarizma.ru', name: 'Администратор', role: 'admin', branchId: null, isActive: true };
 
+// Booking history log — seed with example entries
+const bookingHistory: any[] = [
+  { id: 1, bookingId: 8, changes: ['Статус: Предварительная → Отказ', 'Причина отказа: Изменились планы'], user: 'Анна Козлова', createdAt: new Date(Date.now() - 3 * 86400000).toISOString() },
+  { id: 2, bookingId: 9, changes: ['Статус: Предварительная → Отказ', 'Причина отказа: Не пришёл'], user: 'Мария Белова', createdAt: new Date(Date.now() - 2 * 86400000).toISOString() },
+  { id: 3, bookingId: 5, changes: ['Время начала: 18:00 → 20:00', 'Время окончания: 21:00 → 23:00'], user: 'Мария Белова', createdAt: new Date(Date.now() - 5 * 86400000).toISOString() },
+  { id: 4, bookingId: 5, changes: ['Статус: Оплачена → Завершена'], user: 'Анна Козлова', createdAt: new Date(Date.now() - 1 * 86400000).toISOString() },
+  { id: 5, bookingId: 14, changes: ['Зал: Флекс 2-3 → Вайб 2-2', 'Время начала: 17:00 → 19:00'], user: 'Дмитрий Орлов', createdAt: new Date(Date.now() - 5 * 86400000).toISOString() },
+  { id: 6, bookingId: 14, changes: ['Статус: Предварительная → Отказ', 'Причина отказа: Клиент заболел'], user: 'Дмитрий Орлов', createdAt: new Date(Date.now() - 4 * 86400000).toISOString() },
+  { id: 7, bookingId: 24, changes: ['Филиал: Харизма Новослободская → Харизма Лубянка', 'Зал: Полный газ 3-1 → Полный газ 4-1'], user: 'Елена Волкова', createdAt: new Date(Date.now() - 3 * 86400000).toISOString() },
+  { id: 8, bookingId: 24, changes: ['Статус: Предварительная → Отказ', 'Причина отказа: Нет свободных мест в ресторане'], user: 'Елена Волкова', createdAt: new Date(Date.now() - 2 * 86400000).toISOString() },
+  { id: 9, bookingId: 32, changes: ['Предоплата: 0 ₽ → 20970 ₽'], user: 'Игорь Петров', createdAt: new Date(Date.now() - 3 * 86400000).toISOString() },
+  { id: 10, bookingId: 32, changes: ['Статус: Оплачена → Завершена'], user: 'Игорь Петров', createdAt: new Date(Date.now() - 1 * 86400000).toISOString() },
+];
+let nextHistoryId = 11;
+
 let nextBookingId = bookings.length + 1;
 let nextRoomId = rooms.length + 1;
 let nextBranchId = branches.length + 1;
@@ -165,8 +180,60 @@ mock.onPut(/\/bookings\/(\d+)/).reply((config) => {
   const id = parseInt(config.url!.match(/\/bookings\/(\d+)/)![1]);
   const idx = bookings.findIndex(x => x.id === id);
   if (idx === -1) return [404];
-  bookings[idx] = { ...bookings[idx], ...JSON.parse(config.data), updatedAt: new Date().toISOString() };
+  const old = { ...bookings[idx] };
+  const updates = JSON.parse(config.data);
+
+  // Track changes for history
+  const changes: string[] = [];
+  if (updates.status && updates.status !== old.status) {
+    const statusLabels: Record<string, string> = { preliminary: 'Предварительная', paid: 'Оплачена', completed: 'Завершена', cancelled: 'Отказ' };
+    changes.push(`Статус: ${statusLabels[old.status] || old.status} → ${statusLabels[updates.status] || updates.status}`);
+  }
+  if (updates.roomId && updates.roomId !== old.roomId) {
+    const oldRoom = rooms.find(r => r.id === old.roomId);
+    const newRoom = rooms.find(r => r.id === updates.roomId);
+    changes.push(`Зал: ${oldRoom?.name || `#${old.roomId}`} → ${newRoom?.name || `#${updates.roomId}`}`);
+  }
+  if (updates.branchId && updates.branchId !== old.branchId) {
+    const oldBranch = branches.find(b => b.id === old.branchId);
+    const newBranch = branches.find(b => b.id === updates.branchId);
+    changes.push(`Филиал: ${oldBranch?.name || `#${old.branchId}`} → ${newBranch?.name || `#${updates.branchId}`}`);
+  }
+  if (updates.startTime && updates.startTime !== old.startTime) {
+    changes.push(`Время начала: ${new Date(old.startTime).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} → ${new Date(updates.startTime).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`);
+  }
+  if (updates.endTime && updates.endTime !== old.endTime) {
+    changes.push(`Время окончания: ${new Date(old.endTime).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} → ${new Date(updates.endTime).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`);
+  }
+  if (updates.totalPrice && updates.totalPrice !== old.totalPrice) {
+    changes.push(`Сумма: ${old.totalPrice} ₽ → ${updates.totalPrice} ₽`);
+  }
+  if (updates.prepaymentAmount !== undefined && updates.prepaymentAmount !== old.prepaymentAmount) {
+    changes.push(`Предоплата: ${old.prepaymentAmount || 0} ₽ → ${updates.prepaymentAmount} ₽`);
+  }
+  if (updates.cancellationReason) {
+    changes.push(`Причина отказа: ${updates.cancellationReason}`);
+  }
+
+  if (changes.length > 0) {
+    bookingHistory.push({
+      id: nextHistoryId++,
+      bookingId: id,
+      changes,
+      user: adminUser.name,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  bookings[idx] = { ...bookings[idx], ...updates, updatedAt: new Date().toISOString() };
   return [200, bookings[idx]];
+});
+
+// Booking history
+mock.onGet(/\/bookings\/(\d+)\/history/).reply((config) => {
+  const id = parseInt(config.url!.match(/\/bookings\/(\d+)\/history/)![1]);
+  const history = bookingHistory.filter(h => h.bookingId === id).sort((a, b) => b.id - a.id);
+  return [200, history];
 });
 
 // ==================== PRICING ====================

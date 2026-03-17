@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Modal, Form, Input, Select, DatePicker, TimePicker, InputNumber,
-  Button, message, Space, Divider, Typography, Tag, Switch, Alert,
+  Button, message, Space, Divider, Typography, Tag, Switch, Alert, Timeline,
 } from 'antd';
-import { TagOutlined, CheckCircleFilled, CloseOutlined, SwapOutlined, DragOutlined } from '@ant-design/icons';
+import { TagOutlined, CheckCircleFilled, CloseOutlined, SwapOutlined, DragOutlined, HistoryOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useBranchStore } from '../../stores/branch-store';
-import { getRooms, createBooking, updateBooking, calculatePrice, getActivePromos, getCalendar } from '../../api/client';
+import { getRooms, createBooking, updateBooking, calculatePrice, getActivePromos, getCalendar, getBookingHistory } from '../../api/client';
 
 const { Text, Title } = Typography;
 
@@ -71,6 +71,7 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
   const [originalCategory, setOriginalCategory] = useState<string>('');
   const [transferSurcharge, setTransferSurcharge] = useState<number>(0);
   const [applySurcharge, setApplySurcharge] = useState(true);
+  const [history, setHistory] = useState<any[]>([]);
 
   const checkBusyRooms = async () => {
     const values = form.getFieldsValue();
@@ -117,6 +118,9 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
     });
     if (!booking) {
       getActivePromos().then(({ data }) => setPromos(data)).catch(() => {});
+    }
+    if (booking && !transferBranchId) {
+      getBookingHistory(booking.id).then(({ data }) => setHistory(data)).catch(() => setHistory([]));
     }
   }, [selectedBranchId, open, booking, transferBranchId]);
 
@@ -168,6 +172,7 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
     setOriginalCategory('');
     setTransferSurcharge(0);
     setApplySurcharge(true);
+    setHistory([]);
   }, [booking, open, form]);
 
   const handleWalkinToggle = (checked: boolean) => {
@@ -276,6 +281,9 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
           updateData.totalPrice = (booking.totalPrice || 0) + transferSurcharge;
         }
         await updateBooking(booking.id, updateData);
+        // Reload history after update
+        getBookingHistory(booking.id).then(({ data }) => setHistory(data)).catch(() => {});
+
         if (transferMode) {
           const room = rooms.find((r: any) => r.id === values.roomId);
           const br = transferBranchId ? branches.find((b: any) => b.id === transferBranchId) : null;
@@ -608,6 +616,41 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
               <Text strong>Итого</Text>
               <Text strong style={{ fontSize: 16 }}>{fmt(booking.totalPrice)} ₽</Text>
             </div>
+          </div>
+        )}
+
+        {/* Change history */}
+        {booking && history.length > 0 && (
+          <div style={{
+            background: '#FAFBFF',
+            padding: '14px 16px',
+            borderRadius: 8,
+            marginBottom: 16,
+            border: '1px solid #e8e8e8',
+            maxHeight: 200,
+            overflowY: 'auto',
+          }}>
+            <Text strong style={{ fontSize: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <HistoryOutlined /> История изменений
+            </Text>
+            <Timeline
+              style={{ marginTop: 12, marginBottom: 0 }}
+              items={history.map((h: any) => ({
+                color: h.changes.some((c: string) => c.startsWith('Статус') && c.includes('Отказ')) ? 'red'
+                  : h.changes.some((c: string) => c.startsWith('Филиал') || c.startsWith('Зал') || c.startsWith('Время')) ? 'blue'
+                  : 'gray',
+                children: (
+                  <div>
+                    <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 2 }}>
+                      {dayjs(h.createdAt).format('DD.MM.YYYY HH:mm')} — {h.user}
+                    </div>
+                    {h.changes.map((c: string, i: number) => (
+                      <div key={i} style={{ fontSize: 12, lineHeight: '18px' }}>{c}</div>
+                    ))}
+                  </div>
+                ),
+              }))}
+            />
           </div>
         )}
 
