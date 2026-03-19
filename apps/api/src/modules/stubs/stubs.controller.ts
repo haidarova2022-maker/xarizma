@@ -39,6 +39,6 @@ export class StubsController {
 
   @Get('slot-config')
   getSlotConfig() {
-    return {};
+    return { slotDuration: 2, gapHours: 0.25, startHour: 10 };
   }
 }
