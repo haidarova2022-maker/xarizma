@@ -10,8 +10,6 @@ export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
 
   @Get()
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
   findAll(
     @Query('branchId') branchId?: number,
     @Query('roomId') roomId?: number,
@@ -23,8 +21,6 @@ export class BookingsController {
   }
 
   @Get('calendar')
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
   getCalendar(
     @Query('branchId') branchId?: string,
     @Query('dateFrom') dateFrom?: string,

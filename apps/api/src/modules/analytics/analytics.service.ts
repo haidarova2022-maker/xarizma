@@ -16,7 +16,6 @@ export class AnalyticsService {
     const prevMonthStart = new Date(now.getFullYear() - 1, now.getMonth(), 1);
     const prevMonthEnd = new Date(now.getFullYear() - 1, now.getMonth() + 1, 0);
 
-    // Current period by source
     const currentResult = await this.db.execute(sql`
       SELECT
         source,
@@ -30,7 +29,6 @@ export class AnalyticsService {
       ORDER BY bookings DESC
     `);
 
-    // Previous year same period by source
     const prevResult = await this.db.execute(sql`
       SELECT
         source,
@@ -68,54 +66,126 @@ export class AnalyticsService {
         r.id AS room_id,
         r.name AS room_name,
         r.category,
-        br.name AS branch_name,
         COUNT(b.id)::int AS bookings,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (b.end_time - b.start_time)) / 3600), 0)::numeric AS hours_sold,
         COALESCE(SUM(b.total_price), 0)::bigint AS revenue,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (b.end_time - b.start_time)) / 3600), 0)::numeric AS booked_hours
+        CASE WHEN COUNT(b.id) > 0 THEN ROUND(SUM(b.total_price)::numeric / COUNT(b.id))::int ELSE 0 END AS avg_check
       FROM rooms r
       LEFT JOIN bookings b ON b.room_id = r.id
         AND b.start_time >= ${new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()}
         AND b.status != 'cancelled'
         ${branchFilter}
-      LEFT JOIN branches br ON br.id = r.branch_id
-      GROUP BY r.id, r.name, r.category, br.name
+      ${branchId ? sql`WHERE r.branch_id = ${branchId}` : sql``}
+      GROUP BY r.id, r.name, r.category
       ORDER BY bookings DESC
     `);
 
     const rows = (result as any).rows as any[];
-    return rows.map((r: any) => ({
-      roomId: r.room_id,
-      roomName: r.room_name,
-      category: r.category,
-      branchName: r.branch_name,
-      bookings: r.bookings,
-      revenue: Number(r.revenue),
-      bookedHours: Math.round(Number(r.booked_hours)),
-    }));
+
+    // Calculate load percentage: booked hours / total available hours this month
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const daysElapsed = now.getDate();
+    const hoursPerDay = 18; // ~18 working hours per day (10:00-04:00)
+    const totalAvailableHours = daysElapsed * hoursPerDay;
+
+    return rows.map((r: any) => {
+      const hoursSold = Math.round(Number(r.hours_sold));
+      return {
+        roomId: r.room_id,
+        roomName: r.room_name,
+        category: r.category,
+        bookings: r.bookings,
+        hoursSold,
+        revenue: Number(r.revenue),
+        avgCheck: r.avg_check,
+        loadPct: totalAvailableHours > 0 ? Math.round((hoursSold / totalAvailableHours) * 100) : 0,
+      };
+    });
   }
 
   async getCancellationAnalytics(branchId?: number) {
     const branchFilter = branchId ? sql`AND branch_id = ${branchId}` : sql``;
 
-    const result = await this.db.execute(sql`
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Current month stats
+    const statsResult = await this.db.execute(sql`
       SELECT
-        TO_CHAR(start_time, 'YYYY-MM') AS month,
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status = 'cancelled')::int AS cancelled_count,
+        COALESCE(SUM(total_price) FILTER (WHERE status = 'cancelled'), 0)::bigint AS lost_revenue
+      FROM bookings
+      WHERE start_time >= ${monthStart.toISOString()}
+        ${branchFilter}
+    `);
+    const stats = (statsResult as any).rows[0];
+
+    const cancelRate = stats.total > 0
+      ? Math.round((stats.cancelled_count / stats.total) * 1000) / 10
+      : 0;
+
+    // By source breakdown
+    const sourceResult = await this.db.execute(sql`
+      SELECT
+        source,
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE status = 'cancelled')::int AS cancelled
       FROM bookings
-      WHERE start_time >= NOW() - INTERVAL '12 months'
+      WHERE start_time >= ${monthStart.toISOString()}
         ${branchFilter}
-      GROUP BY TO_CHAR(start_time, 'YYYY-MM')
-      ORDER BY month
+      GROUP BY source
+      ORDER BY total DESC
     `);
-
-    const rows = (result as any).rows as any[];
-    return rows.map((r: any) => ({
-      month: r.month,
+    const sourceRows = (sourceResult as any).rows as any[];
+    const sourceBreakdown = sourceRows.map((r: any) => ({
+      source: r.source,
       total: r.total,
       cancelled: r.cancelled,
       rate: r.total > 0 ? Math.round((r.cancelled / r.total) * 1000) / 10 : 0,
     }));
+
+    // Recent cancelled bookings
+    const recentResult = await this.db.execute(sql`
+      SELECT
+        b.id,
+        b.start_time AS date,
+        b.guest_name,
+        COALESCE(r.name, 'Без зала') AS room_name,
+        b.source,
+        b.total_price AS lost_amount
+      FROM bookings b
+      LEFT JOIN rooms r ON r.id = b.room_id
+      WHERE b.status = 'cancelled'
+        ${branchFilter}
+      ORDER BY b.updated_at DESC
+      LIMIT 50
+    `);
+    const recentRows = (recentResult as any).rows as any[];
+    const recent = recentRows.map((r: any) => ({
+      id: r.id,
+      date: r.date,
+      guestName: r.guest_name,
+      roomName: r.room_name,
+      reason: 'Отмена',
+      source: r.source,
+      lostAmount: Number(r.lost_amount),
+      isNoShow: false,
+    }));
+
+    return {
+      cancelledCount: stats.cancelled_count,
+      noShowCount: 0,
+      cancelRate,
+      noShowRate: 0,
+      lostRevenue: Number(stats.lost_revenue),
+      reasonBreakdown: [
+        { reason: 'Отмена клиентом', count: stats.cancelled_count },
+      ],
+      sourceBreakdown,
+      recent,
+    };
   }
 
   async getManagerAnalytics(_branchId?: number) {
