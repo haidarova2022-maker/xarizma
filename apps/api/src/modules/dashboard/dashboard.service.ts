@@ -8,79 +8,91 @@ import type * as schema from '../../drizzle/schema';
 export class DashboardService {
   constructor(@Inject(DRIZZLE) private db: NodePgDatabase<typeof schema>) {}
 
-  async getStats(branchId?: number, period: string = 'month') {
+  async getStats(branchId?: number) {
     const now = new Date();
-    let dateFrom: Date;
-    let prevDateFrom: Date;
-    let prevDateTo: Date;
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
 
-    if (period === 'week') {
-      dateFrom = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
-      prevDateFrom = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate() - 7);
-      prevDateTo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-    } else {
-      // month
-      dateFrom = new Date(now.getFullYear(), now.getMonth(), 1);
-      prevDateFrom = new Date(now.getFullYear() - 1, now.getMonth(), 1);
-      prevDateTo = new Date(now.getFullYear() - 1, now.getMonth() + 1, 0);
-    }
+    // Previous year same month
+    const prevMonthStart = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+    const prevMonthEnd = new Date(now.getFullYear() - 1, now.getMonth() + 1, 0, 23, 59, 59);
 
-    const branchFilter = branchId ? sql`AND branch_id = ${branchId}` : sql``;
+    const bf = branchId ? sql`AND branch_id = ${branchId}` : sql``;
 
-    // Current period stats
-    const currentResult = await this.db.execute(sql`
+    // Current month
+    const monthRes = await this.db.execute(sql`
       SELECT
-        COUNT(*)::int AS total_bookings,
-        COALESCE(SUM(guest_count), 0)::int AS total_guests,
-        COALESCE(SUM(total_price), 0)::bigint AS total_revenue,
+        COUNT(*)::int AS bookings,
+        COALESCE(SUM(guest_count), 0)::int AS guests,
+        COALESCE(SUM(total_price), 0)::bigint AS revenue,
         CASE WHEN COUNT(*) > 0 THEN ROUND(SUM(total_price)::numeric / COUNT(*))::int ELSE 0 END AS avg_check,
         COUNT(*) FILTER (WHERE status IN ('new', 'awaiting_payment'))::int AS leads,
-        COUNT(*) FILTER (WHERE status IN ('fully_paid', 'completed'))::int AS conversions,
-        COUNT(*) FILTER (WHERE status = 'cancelled')::int AS cancellations
+        COUNT(*) FILTER (WHERE status IN ('fully_paid', 'completed'))::int AS conversions
       FROM bookings
-      WHERE start_time >= ${dateFrom.toISOString()}
-        AND start_time <= ${now.toISOString()}
-        ${branchFilter}
+      WHERE start_time >= ${monthStart.toISOString()} AND start_time <= ${now.toISOString()} ${bf}
     `);
 
-    // Previous period (LFL)
-    const prevResult = await this.db.execute(sql`
+    // Today
+    const todayRes = await this.db.execute(sql`
       SELECT
-        COUNT(*)::int AS total_bookings,
-        COALESCE(SUM(total_price), 0)::bigint AS total_revenue
+        COUNT(*)::int AS bookings,
+        COALESCE(SUM(guest_count), 0)::int AS guests,
+        COUNT(*) FILTER (WHERE status IN ('new', 'awaiting_payment'))::int AS leads
       FROM bookings
-      WHERE start_time >= ${prevDateFrom.toISOString()}
-        AND start_time <= ${prevDateTo.toISOString()}
-        ${branchFilter}
+      WHERE start_time >= ${todayStart.toISOString()} AND start_time <= ${todayEnd.toISOString()} ${bf}
     `);
 
-    const row = (currentResult as any).rows[0];
-    const prevRow = (prevResult as any).rows[0];
+    // Previous year same month
+    const prevRes = await this.db.execute(sql`
+      SELECT
+        COUNT(*)::int AS bookings,
+        COALESCE(SUM(guest_count), 0)::int AS guests,
+        COALESCE(SUM(total_price), 0)::bigint AS revenue,
+        CASE WHEN COUNT(*) > 0 THEN ROUND(SUM(total_price)::numeric / COUNT(*))::int ELSE 0 END AS avg_check,
+        COUNT(*) FILTER (WHERE status IN ('new', 'awaiting_payment'))::int AS leads,
+        COUNT(*) FILTER (WHERE status IN ('fully_paid', 'completed'))::int AS conversions
+      FROM bookings
+      WHERE start_time >= ${prevMonthStart.toISOString()} AND start_time <= ${prevMonthEnd.toISOString()} ${bf}
+    `);
 
-    const bookingsLfl = prevRow.total_bookings > 0
-      ? Math.round(((row.total_bookings - prevRow.total_bookings) / prevRow.total_bookings) * 100)
-      : 0;
-    const revenueLfl = prevRow.total_revenue > 0
-      ? Math.round(((Number(row.total_revenue) - Number(prevRow.total_revenue)) / Number(prevRow.total_revenue)) * 100)
-      : 0;
+    const m = (monthRes as any).rows[0];
+    const t = (todayRes as any).rows[0];
+    const p = (prevRes as any).rows[0];
 
-    const conversionRate = row.leads + row.conversions > 0
-      ? Math.round((row.conversions / (row.leads + row.conversions)) * 1000) / 10
-      : 0;
+    const lfl = (cur: number, prev: number) =>
+      prev > 0 ? Math.round(((cur - prev) / prev) * 100) : 0;
+
+    const convRate = (leads: number, conv: number) =>
+      leads + conv > 0 ? Math.round((conv / (leads + conv)) * 1000) / 10 : 0;
+
+    // Revenue plan = last year * 1.2 (20% growth target)
+    const revenuePlan = Math.round(Number(p.revenue) * 1.2);
+    const avgCheckPlan = Math.round(p.avg_check * 1.15);
 
     return {
-      totalBookings: row.total_bookings,
-      totalGuests: row.total_guests,
-      totalRevenue: Number(row.total_revenue),
-      avgCheck: row.avg_check,
-      leads: row.leads,
-      conversions: row.conversions,
-      cancellations: row.cancellations,
-      conversionRate,
-      lfl: {
-        bookings: bookingsLfl,
-        revenue: revenueLfl,
-      },
+      bookingsMonth: m.bookings,
+      bookingsToday: t.bookings,
+      guestsMonth: m.guests,
+      guestsToday: t.guests,
+      bookingsLfl: lfl(m.bookings, p.bookings),
+      guestsLfl: lfl(m.guests, p.guests),
+      bookingsLastYear: p.bookings,
+      guestsLastYear: p.guests,
+      revenueMonth: Number(m.revenue),
+      revenueLastYear: Number(p.revenue),
+      revenueLfl: lfl(Number(m.revenue), Number(p.revenue)),
+      revenuePlan,
+      avgCheck: m.avg_check,
+      avgCheckLastYear: p.avg_check,
+      avgCheckLfl: lfl(m.avg_check, p.avg_check),
+      avgCheckPlan,
+      leadsMonth: m.leads,
+      leadsToday: t.leads,
+      leadsLastYear: p.leads,
+      leadsLfl: lfl(m.leads, p.leads),
+      conversionRate: convRate(m.leads, m.conversions),
+      conversionLastYear: convRate(p.leads, p.conversions),
     };
   }
 }

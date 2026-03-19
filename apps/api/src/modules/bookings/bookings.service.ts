@@ -1,5 +1,5 @@
 import { Injectable, Inject, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
-import { eq, and, or, gte, lte, lt, gt, ne, sql, between } from 'drizzle-orm';
+import { eq, and, or, gte, lte, lt, gt, ne, sql, between, desc } from 'drizzle-orm';
 import { DRIZZLE } from '../../drizzle/drizzle.module';
 import { bookings, rooms } from '../../drizzle/schema';
 import { PricingService } from '../pricing/pricing.service';
@@ -34,9 +34,9 @@ export class BookingsService {
     if (filters?.dateTo) conditions.push(lte(bookings.startTime, new Date(filters.dateTo)));
 
     if (conditions.length > 0) {
-      return this.db.select().from(bookings).where(and(...conditions));
+      return this.db.select().from(bookings).where(and(...conditions)).orderBy(desc(bookings.startTime));
     }
-    return this.db.select().from(bookings);
+    return this.db.select().from(bookings).orderBy(desc(bookings.startTime));
   }
 
   async findById(id: number) {
