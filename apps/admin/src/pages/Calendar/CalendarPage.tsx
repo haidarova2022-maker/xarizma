@@ -18,11 +18,39 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  preliminary: '#FFCC80',
-  paid: '#4CAF50',
-  completed: '#64B5F6',
+  new: '#2196F3',
+  awaiting_payment: '#FF9800',
+  partially_paid: '#FFC107',
+  fully_paid: '#4CAF50',
+  walkin: '#00BCD4',
+  completed: '#9C27B0',
   cancelled: '#EF9A9A',
 };
+
+const STATUS_LABELS: Record<string, string> = {
+  new: 'Новая',
+  awaiting_payment: 'Ожидает оплаты',
+  partially_paid: 'Частичная оплата',
+  fully_paid: 'Оплачена',
+  walkin: 'Walk-in',
+  completed: 'Завершена',
+  cancelled: 'Отменена',
+};
+
+const LANE_HEIGHT = 44;
+
+/** Assign non-overlapping lanes to bookings */
+function assignLanes(overlays: any[]): { maxLane: number; items: any[] } {
+  const sorted = [...overlays].sort((a, b) => a.gridFrom - b.gridFrom);
+  const laneEnds: number[] = [];
+  const items = sorted.map(b => {
+    let lane = laneEnds.findIndex(end => end <= b.gridFrom);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(0); }
+    laneEnds[lane] = b.gridTo;
+    return { ...b, lane };
+  });
+  return { maxLane: laneEnds.length, items };
+}
 
 const CELL_W = 40;
 const HALF_CELL = CELL_W / 2;
@@ -485,9 +513,9 @@ export default function CalendarPage() {
   }, [date, todayHoursCount]);
 
   // Get all bookings for a room as positioned overlays
-  const getRoomBookings = useCallback((roomId: number) => {
+  const getRoomBookings = useCallback((roomId: number | null) => {
     return bookings
-      .filter((b: any) => b.roomId === roomId)
+      .filter((b: any) => roomId === null ? !b.roomId : b.roomId === roomId)
       .map((b: any) => {
         const bStart = dayjs(b.startTime);
         const bEnd = dayjs(b.endTime);
@@ -593,11 +621,11 @@ export default function CalendarPage() {
       ) : rooms.length === 0 ? (
         <Empty description="Нет залов для выбранного филиала" />
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)', border: '1px solid #e8e8e8', borderRadius: 8 }}>
           <div style={{ minWidth: gridTotal * CELL_W + ROOM_COL }}>
-            {/* Date row */}
-            <div style={{ display: 'flex' }}>
-              <div style={{ width: ROOM_COL, flexShrink: 0 }} />
+            {/* Date row — sticky */}
+            <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, backgroundColor: '#fff' }}>
+              <div style={{ width: ROOM_COL, flexShrink: 0, position: 'sticky', left: 0, zIndex: 13, backgroundColor: '#fff' }} />
               <div style={{
                 width: todayHoursCount * CELL_W, flexShrink: 0, textAlign: 'center', padding: '4px 0',
                 fontWeight: 600, fontSize: 13, color: '#333', backgroundColor: '#F9F8FF',
@@ -614,9 +642,9 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            {/* Hours row */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #e8e8e8' }}>
-              <div style={{ width: ROOM_COL, flexShrink: 0, padding: '6px 8px', fontSize: 11, color: '#8c8c8c', fontWeight: 500 }}>
+            {/* Hours row — sticky below date */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #e8e8e8', position: 'sticky', top: 26, zIndex: 12, backgroundColor: '#fff' }}>
+              <div style={{ width: ROOM_COL, flexShrink: 0, padding: '6px 8px', fontSize: 11, color: '#8c8c8c', fontWeight: 500, position: 'sticky', left: 0, zIndex: 13, backgroundColor: '#fff' }}>
                 Зал
               </div>
               {gridIndices.map(gi => {
@@ -633,6 +661,67 @@ export default function CalendarPage() {
                 );
               })}
             </div>
+
+            {/* === Bookings without room (from Bitrix) — shown at TOP === */}
+            {(() => {
+              const noRoomOverlays = getRoomBookings(null);
+              if (noRoomOverlays.length === 0) return null;
+              const { maxLane, items: laned } = assignLanes(noRoomOverlays);
+              return (
+                <div style={{ display: 'flex', borderBottom: '2px solid #E36FA8', alignItems: 'stretch', backgroundColor: '#FFF7E6' }}>
+                  <div style={{
+                    width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0',
+                    position: 'sticky', left: 0, zIndex: 5, backgroundColor: '#FFF7E6',
+                  }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, lineHeight: '16px', color: '#ad6800' }}>Бронирования</div>
+                    <div style={{ color: '#ad6800', fontSize: 11, marginTop: 2 }}>{noRoomOverlays.length} на день</div>
+                    <div style={{ color: '#d48806', fontSize: 10, marginTop: 2 }}>Зал не назначен</div>
+                  </div>
+                  <div style={{ position: 'relative', display: 'flex', flex: 1, minHeight: Math.max(1, maxLane) * LANE_HEIGHT }}>
+                    {gridIndices.map(gi => (
+                      <div key={gi} style={{
+                        width: CELL_W, flexShrink: 0,
+                        borderLeft: gi === todayHoursCount ? '2px solid #d9d9d9' : 'none',
+                        backgroundColor: gi % 2 === 0 ? '#FFFBE6' : '#FFF7E6',
+                      }} />
+                    ))}
+                    {laned.map((b: any) => {
+                      const left = b.gridFrom * CELL_W + 2;
+                      const width = (b.gridTo - b.gridFrom) * CELL_W - 4;
+                      const bStart = dayjs(b.startTime);
+                      const bEnd = dayjs(b.endTime);
+                      const top = b.lane * LANE_HEIGHT + 2;
+                      return (
+                        <div
+                          key={b.id}
+                          onClick={() => { setPrefill(undefined); setSelectedBooking(b); setShowForm(true); }}
+                          title={`${b.guestName || '—'} | ${bStart.format('HH:mm')}–${bEnd.format('HH:mm')} | ${STATUS_LABELS[b.status] || b.status} | ${b.guestCount || '?'} чел.`}
+                          style={{
+                            position: 'absolute', left, width: Math.max(width, 30), top, height: LANE_HEIGHT - 4,
+                            borderRadius: 6, backgroundColor: STATUS_COLORS[b.status] || '#ddd',
+                            border: '1px solid rgba(0,0,0,0.15)', cursor: 'pointer', zIndex: 2,
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                            overflow: 'hidden', padding: '0 3px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                          }}
+                        >
+                          <span style={{ fontSize: 11, fontWeight: 600, color: '#fff', lineHeight: '14px', whiteSpace: 'nowrap', textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
+                            {b.guestName?.split(' ')[0] || '—'}
+                          </span>
+                          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.9)', lineHeight: '12px', whiteSpace: 'nowrap', textShadow: '0 1px 1px rgba(0,0,0,0.2)' }}>
+                            {bStart.format('HH:mm')}–{bEnd.format('HH:mm')}
+                          </span>
+                          {width > 80 && (
+                            <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.8)', lineHeight: '10px' }}>
+                              {b.guestCount || '?'} чел.
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Room rows — grouped by branch when "Все" */}
             {(() => {
@@ -680,7 +769,8 @@ export default function CalendarPage() {
                         <div key={room.id} style={{ display: 'flex', borderBottom: '1px solid #f5f5f5', alignItems: 'stretch' }}>
                           <div style={{
                             width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0',
-                            backgroundColor: isCommon ? '#F5F0FF' : undefined,
+                            position: 'sticky', left: 0, zIndex: 5,
+                            backgroundColor: isCommon ? '#F5F0FF' : '#fff',
                           }}>
                             <div style={{ fontWeight: 600, fontSize: 12, lineHeight: '16px' }}>{room.name}</div>
                             <div style={{ fontWeight: 600, fontSize: 11, color: isCommon ? '#722ED1' : '#E36FA8', lineHeight: '14px' }}>
