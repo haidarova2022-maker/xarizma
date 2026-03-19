@@ -68,6 +68,7 @@ def upsert_booking(conn, booking: dict) -> str:
                 guest_name, guest_phone, guest_email, guest_comment,
                 base_price, discount_amount, total_price,
                 prepayment_amount, payment_status, source,
+                manager_bitrix_id, manager_name,
                 created_at, updated_at
             ) VALUES (
                 %(bitrix_deal_id)s, %(branch_id)s, %(room_id)s, %(booking_type)s, %(status)s,
@@ -75,6 +76,7 @@ def upsert_booking(conn, booking: dict) -> str:
                 %(guest_name)s, %(guest_phone)s, %(guest_email)s, %(guest_comment)s,
                 %(base_price)s, %(discount_amount)s, %(total_price)s,
                 %(prepayment_amount)s, %(payment_status)s, %(source)s,
+                %(manager_bitrix_id)s, %(manager_name)s,
                 COALESCE(%(created_at)s::timestamp, NOW()),
                 COALESCE(%(updated_at)s::timestamp, NOW())
             )
@@ -92,6 +94,8 @@ def upsert_booking(conn, booking: dict) -> str:
                 prepayment_amount = EXCLUDED.prepayment_amount,
                 payment_status = EXCLUDED.payment_status,
                 source = EXCLUDED.source,
+                manager_bitrix_id = EXCLUDED.manager_bitrix_id,
+                manager_name = EXCLUDED.manager_name,
                 updated_at = COALESCE(EXCLUDED.updated_at, NOW())
             RETURNING (xmax = 0) AS is_insert
         """, db_booking)
@@ -108,6 +112,7 @@ UPSERT_COLUMNS = [
     "guest_name", "guest_phone", "guest_email", "guest_comment",
     "base_price", "discount_amount", "total_price",
     "prepayment_amount", "payment_status", "source",
+    "manager_bitrix_id", "manager_name",
     "created_at", "updated_at",
 ]
 
@@ -153,6 +158,8 @@ def upsert_bookings_batch(conn, bookings: list[dict]) -> dict:
             prepayment_amount = EXCLUDED.prepayment_amount,
             payment_status = EXCLUDED.payment_status,
             source = EXCLUDED.source,
+            manager_bitrix_id = EXCLUDED.manager_bitrix_id,
+            manager_name = EXCLUDED.manager_name,
             updated_at = COALESCE(EXCLUDED.updated_at, NOW())
     """
 

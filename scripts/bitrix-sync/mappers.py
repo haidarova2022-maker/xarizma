@@ -19,6 +19,49 @@ logger = logging.getLogger(__name__)
 
 _skip_contacts = False
 
+# Manager name cache: bitrix_user_id → "Имя Фамилия"
+_manager_cache: dict[int, str] = {}
+_manager_cache_loaded = False
+
+
+def _ensure_manager_cache():
+    """Load all managers from Bitrix on first call."""
+    global _manager_cache_loaded
+    if _manager_cache_loaded:
+        return
+    try:
+        from bitrix_client import call_method
+        result = call_method("user.get", {"filter": {"ACTIVE": True}, "start": 0})
+        users = result.get("result", [])
+        for u in users:
+            uid = int(u["ID"])
+            name = f"{u.get('NAME', '')} {u.get('LAST_NAME', '')}".strip()
+            if name:
+                _manager_cache[uid] = name
+        # Bitrix returns max 50 users per page, fetch more if needed
+        total = result.get("total", 0)
+        start = 50
+        while start < total:
+            result = call_method("user.get", {"filter": {"ACTIVE": True}, "start": start})
+            for u in result.get("result", []):
+                uid = int(u["ID"])
+                name = f"{u.get('NAME', '')} {u.get('LAST_NAME', '')}".strip()
+                if name:
+                    _manager_cache[uid] = name
+            start += 50
+        logger.info(f"Manager cache loaded: {len(_manager_cache)} users")
+    except Exception as e:
+        logger.warning(f"Failed to load manager cache: {e}")
+    _manager_cache_loaded = True
+
+
+def _resolve_manager_name(bitrix_id: int | None) -> str | None:
+    """Resolve manager name from Bitrix user ID."""
+    if not bitrix_id:
+        return None
+    _ensure_manager_cache()
+    return _manager_cache.get(bitrix_id)
+
 
 def set_skip_contacts(skip: bool):
     """Skip contact API calls for faster bulk sync."""
@@ -100,6 +143,11 @@ def map_deal_to_booking(deal: dict) -> dict | None:
     # --- Resource booking IDs (store for future room resolution) ---
     resource_ids = _extract_resource_ids(deal.get(FIELD_BOOKING_RESOURCE))
 
+    # --- Manager (responsible user) ---
+    assigned_by = deal.get("ASSIGNED_BY_ID")
+    manager_bitrix_id = int(assigned_by) if assigned_by else None
+    manager_name = _resolve_manager_name(manager_bitrix_id)
+
     # --- Build booking row ---
     booking = {
         "bitrix_deal_id": str(deal_id),
@@ -120,6 +168,8 @@ def map_deal_to_booking(deal: dict) -> dict | None:
         "prepayment_amount": prepayment or 0,
         "payment_status": payment_status,
         "source": source,
+        "manager_bitrix_id": manager_bitrix_id,
+        "manager_name": manager_name,
         "created_at": deal.get(FIELD_DATE_CREATE),
         "updated_at": deal.get("DATE_MODIFY"),
         "_resource_ids": resource_ids,  # internal, not written to DB

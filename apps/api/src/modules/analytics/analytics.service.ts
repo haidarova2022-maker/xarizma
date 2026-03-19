@@ -251,8 +251,53 @@ export class AnalyticsService {
     };
   }
 
-  async getManagerAnalytics(_branchId?: number) {
-    // Stub — no manager data in Bitrix sync
-    return [];
+  async getManagerAnalytics(branchId?: number) {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const bf = branchId ? sql`AND branch_id = ${branchId}` : sql``;
+
+    const result = await this.db.execute(sql`
+      SELECT
+        manager_bitrix_id,
+        manager_name,
+        COUNT(*) FILTER (WHERE status NOT IN ('cancelled'))::int AS bookings,
+        COUNT(*)::int AS total_inquiries,
+        COALESCE(SUM(total_price) FILTER (WHERE status NOT IN ('cancelled')), 0)::bigint AS revenue,
+        COALESCE(SUM(guest_count) FILTER (WHERE status NOT IN ('cancelled')), 0)::int AS guests
+      FROM bookings
+      WHERE manager_name IS NOT NULL
+        AND start_time >= ${monthStart.toISOString()}
+        AND start_time <= ${now.toISOString()}
+        ${bf}
+      GROUP BY manager_bitrix_id, manager_name
+      ORDER BY revenue DESC
+    `);
+
+    const rows = (result as any).rows || [];
+    return rows.map((r: any) => {
+      const revenue = Number(r.revenue);
+      const bookings = r.bookings;
+      const totalInquiries = r.total_inquiries;
+      const conversion = totalInquiries > 0 ? Math.round((bookings / totalInquiries) * 100) : 0;
+      const avgCheck = bookings > 0 ? Math.round(revenue / bookings) : 0;
+      const plan = Math.round(revenue * 1.2); // 20% growth target placeholder
+      const planPct = plan > 0 ? Math.round((revenue / plan) * 100) : 0;
+      const motivationPct = planPct >= 100 ? 5 : planPct >= 70 ? 3 : 2;
+      const motivation = Math.round(revenue * motivationPct / 100);
+
+      return {
+        managerId: r.manager_bitrix_id,
+        managerName: r.manager_name,
+        bookings,
+        totalInquiries,
+        conversion,
+        revenue,
+        avgCheck,
+        plan,
+        planPct,
+        motivationPct,
+        motivation,
+      };
+    });
   }
 }
