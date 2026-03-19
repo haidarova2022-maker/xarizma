@@ -10,29 +10,35 @@ const { Title } = Typography;
 const { RangePicker } = DatePicker;
 
 const STATUS_COLORS: Record<string, string> = {
-  preliminary: 'orange',
-  paid: 'green',
-  completed: 'blue',
+  new: 'blue',
+  awaiting_payment: 'orange',
+  partially_paid: 'gold',
+  fully_paid: 'green',
+  walkin: 'cyan',
+  completed: 'purple',
   cancelled: 'red',
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  preliminary: 'Предварительная',
-  paid: 'Оплачена',
+  new: 'Новая',
+  awaiting_payment: 'Ожидает оплаты',
+  partially_paid: 'Частичная оплата',
+  fully_paid: 'Оплачена',
+  walkin: 'Walk-in',
   completed: 'Завершена',
-  cancelled: 'Отказ',
+  cancelled: 'Отменена',
 };
 
 const SOURCE_LABELS: Record<string, string> = {
   widget: 'Виджет',
-  chat: 'Менеджер (чат)',
-  phone: 'Менеджер (тел.)',
+  admin: 'Менеджер',
+  phone: 'Телефон',
   walkin: 'Walk-in',
 };
 
 const SOURCE_COLORS: Record<string, string> = {
   widget: 'blue',
-  chat: 'default',
+  admin: 'default',
   phone: 'cyan',
   walkin: 'purple',
 };

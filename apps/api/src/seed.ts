@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as bcrypt from 'bcrypt';
+import { sql } from 'drizzle-orm';
 import * as schema from './drizzle/schema';
 
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/xarizma';
@@ -96,8 +97,19 @@ async function seed() {
     },
   ];
 
-  const insertedBranches = await db.insert(schema.branches).values(branchData).returning();
-  console.log(`  ✅ Created ${insertedBranches.length} branches`);
+  const insertedBranches = await db.insert(schema.branches)
+    .values(branchData)
+    .onConflictDoNothing({ target: schema.branches.slug })
+    .returning();
+
+  // If branches already existed, fetch them
+  const allBranches = insertedBranches.length > 0
+    ? insertedBranches
+    : await db.select().from(schema.branches).orderBy(schema.branches.id);
+
+  console.log(`  ✅ Branches: ${allBranches.length} (${insertedBranches.length} new)`);
+
+  const branchBySlug = Object.fromEntries(allBranches.map(b => [b.slug, b]));
 
   // ==================== ROOMS ====================
   console.log('🚪 Creating rooms...');
@@ -105,7 +117,6 @@ async function seed() {
   const roomsData: any[] = [];
 
   // Сретенка — 9 залов
-  const sretenka = insertedBranches[0];
   const sretRooms = [
     { name: 'Зал 1', number: 1, category: 'bratski' as const, areaSqm: 15, capacityStandard: 4, capacityMax: 6 },
     { name: 'Зал 2', number: 2, category: 'bratski' as const, areaSqm: 18, capacityStandard: 5, capacityMax: 8 },
@@ -117,10 +128,9 @@ async function seed() {
     { name: 'Зал 8', number: 8, category: 'full_gas' as const, areaSqm: 60, capacityStandard: 20, capacityMax: 30 },
     { name: 'VIP Зал', number: 9, category: 'full_gas' as const, areaSqm: 80, capacityStandard: 25, capacityMax: 40 },
   ];
-  sretRooms.forEach(r => roomsData.push({ ...r, branchId: sretenka.id, hasKaraoke: true, hasBar: r.category !== 'bratski' }));
+  sretRooms.forEach(r => roomsData.push({ ...r, branchId: branchBySlug.sretenka.id, hasKaraoke: true, hasBar: r.category !== 'bratski' }));
 
   // Бауманская — 10 залов
-  const baum = insertedBranches[1];
   const baumRooms = [
     { name: 'Зал 1', number: 1, category: 'bratski' as const, areaSqm: 14, capacityStandard: 4, capacityMax: 6 },
     { name: 'Зал 2', number: 2, category: 'bratski' as const, areaSqm: 16, capacityStandard: 4, capacityMax: 7 },
@@ -133,10 +143,9 @@ async function seed() {
     { name: 'Зал 9', number: 9, category: 'full_gas' as const, areaSqm: 55, capacityStandard: 18, capacityMax: 28 },
     { name: 'VIP Зал', number: 10, category: 'full_gas' as const, areaSqm: 70, capacityStandard: 22, capacityMax: 35 },
   ];
-  baumRooms.forEach(r => roomsData.push({ ...r, branchId: baum.id, hasKaraoke: true, hasBar: r.category !== 'bratski' }));
+  baumRooms.forEach(r => roomsData.push({ ...r, branchId: branchBySlug.baumanskaya.id, hasKaraoke: true, hasBar: r.category !== 'bratski' }));
 
   // Новослободская — 8 залов
-  const novo = insertedBranches[2];
   const novoRooms = [
     { name: 'Зал 1', number: 1, category: 'bratski' as const, areaSqm: 16, capacityStandard: 4, capacityMax: 6 },
     { name: 'Зал 2', number: 2, category: 'bratski' as const, areaSqm: 18, capacityStandard: 5, capacityMax: 8 },
@@ -147,10 +156,9 @@ async function seed() {
     { name: 'Зал 7', number: 7, category: 'full_gas' as const, areaSqm: 50, capacityStandard: 15, capacityMax: 25 },
     { name: 'VIP Зал', number: 8, category: 'full_gas' as const, areaSqm: 65, capacityStandard: 20, capacityMax: 32 },
   ];
-  novoRooms.forEach(r => roomsData.push({ ...r, branchId: novo.id, hasKaraoke: true, hasBar: r.category !== 'bratski' }));
+  novoRooms.forEach(r => roomsData.push({ ...r, branchId: branchBySlug.novoslobodskaya.id, hasKaraoke: true, hasBar: r.category !== 'bratski' }));
 
   // Лубянка — 6 залов
-  const lub = insertedBranches[3];
   const lubRooms = [
     { name: 'Зал 1', number: 1, category: 'bratski' as const, areaSqm: 15, capacityStandard: 4, capacityMax: 6 },
     { name: 'Зал 2', number: 2, category: 'vibe' as const, areaSqm: 25, capacityStandard: 6, capacityMax: 10 },
@@ -159,10 +167,9 @@ async function seed() {
     { name: 'Зал 5', number: 5, category: 'full_gas' as const, areaSqm: 48, capacityStandard: 14, capacityMax: 22 },
     { name: 'VIP Зал', number: 6, category: 'full_gas' as const, areaSqm: 60, capacityStandard: 18, capacityMax: 30 },
   ];
-  lubRooms.forEach(r => roomsData.push({ ...r, branchId: lub.id, hasKaraoke: true, hasBar: r.category !== 'bratski' }));
+  lubRooms.forEach(r => roomsData.push({ ...r, branchId: branchBySlug.lubyanka.id, hasKaraoke: true, hasBar: r.category !== 'bratski' }));
 
   // Рублёвка — 11 залов
-  const rub = insertedBranches[4];
   const rubRooms = [
     { name: 'Зал 1', number: 1, category: 'bratski' as const, areaSqm: 16, capacityStandard: 4, capacityMax: 6 },
     { name: 'Зал 2', number: 2, category: 'bratski' as const, areaSqm: 18, capacityStandard: 5, capacityMax: 8 },
@@ -176,10 +183,23 @@ async function seed() {
     { name: 'Зал 10', number: 10, category: 'full_gas' as const, areaSqm: 65, capacityStandard: 20, capacityMax: 30 },
     { name: 'VIP Зал', number: 11, category: 'full_gas' as const, areaSqm: 90, capacityStandard: 30, capacityMax: 50 },
   ];
-  rubRooms.forEach(r => roomsData.push({ ...r, branchId: rub.id, hasKaraoke: true, hasBar: r.category !== 'bratski' }));
+  rubRooms.forEach(r => roomsData.push({ ...r, branchId: branchBySlug.rublevka.id, hasKaraoke: true, hasBar: r.category !== 'bratski' }));
 
-  const insertedRooms = await db.insert(schema.rooms).values(roomsData).returning();
-  console.log(`  ✅ Created ${insertedRooms.length} rooms`);
+  // Ensure unique index exists for idempotent inserts
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS rooms_branch_id_number_idx ON rooms (branch_id, number)
+  `);
+
+  let roomsInserted = 0;
+  for (const room of roomsData) {
+    const result = await db.execute(sql`
+      INSERT INTO rooms (branch_id, name, number, category, area_sqm, capacity_standard, capacity_max, has_karaoke, has_bar)
+      VALUES (${room.branchId}, ${room.name}, ${room.number}, ${room.category}, ${room.areaSqm}, ${room.capacityStandard}, ${room.capacityMax}, ${room.hasKaraoke}, ${room.hasBar})
+      ON CONFLICT (branch_id, number) DO NOTHING
+    `);
+    if ((result as any).rowCount > 0) roomsInserted++;
+  }
+  console.log(`  ✅ Rooms: ${roomsData.length} total (${roomsInserted} new)`);
 
   // ==================== PRICE RULES ====================
   console.log('💰 Creating price rules...');
@@ -187,7 +207,6 @@ async function seed() {
   const categories = ['bratski', 'vibe', 'flex', 'full_gas'] as const;
   const dayTypes = ['weekday_day', 'weekday_evening', 'friday_day', 'friday_evening', 'saturday', 'sunday'] as const;
 
-  // Price matrix from the plan (per hour)
   const priceMatrix: Record<string, Record<string, number>> = {
     bratski: {
       weekday_day: 1390, weekday_evening: 1390,
@@ -211,35 +230,43 @@ async function seed() {
     },
   };
 
-  const priceRulesData: any[] = [];
+  let pricesInserted = 0;
   for (const cat of categories) {
     for (const dt of dayTypes) {
-      priceRulesData.push({
-        category: cat,
-        dayType: dt,
-        timeFrom: '00:00',
-        timeTo: '23:59',
-        pricePerHour: priceMatrix[cat][dt],
-        isSeasonal: false,
-        seasonCoefficient: '1.00',
-      });
+      const result = await db.execute(sql`
+        INSERT INTO price_rules (category, day_type, time_from, time_to, price_per_hour, is_seasonal, season_coefficient)
+        VALUES (${cat}, ${dt}, '00:00', '23:59', ${priceMatrix[cat][dt]}, false, '1.00')
+        ON CONFLICT DO NOTHING
+      `);
+      if ((result as any).rowCount > 0) pricesInserted++;
     }
   }
+  console.log(`  ✅ Price rules: ${categories.length * dayTypes.length} total (${pricesInserted} new)`);
 
-  const insertedPrices = await db.insert(schema.priceRules).values(priceRulesData).returning();
-  console.log(`  ✅ Created ${insertedPrices.length} price rules`);
-
-  // ==================== ADMIN USER ====================
-  console.log('👤 Creating admin user...');
+  // ==================== USERS ====================
+  console.log('👤 Creating users...');
 
   const passwordHash = await bcrypt.hash('Admin123!', 10);
-  await db.insert(schema.users).values({
-    email: 'admin@xarizma.ru',
-    passwordHash,
-    name: 'Администратор',
-    role: 'admin',
-  });
-  console.log('  ✅ Created admin user (admin@xarizma.ru / Admin123!)');
+
+  const usersData = [
+    { email: 'admin@xarizma.ru', name: 'Администратор', role: 'admin' as const, branchId: null },
+    { email: 'rop@xarizma.ru', name: 'Иванов Сергей (РОП)', role: 'rop' as const, branchId: null },
+    { email: 'manager.sretenka@xarizma.ru', name: 'Петрова Анна', role: 'senior_manager' as const, branchId: branchBySlug.sretenka.id },
+    { email: 'manager.baumanskaya@xarizma.ru', name: 'Козлов Дмитрий', role: 'senior_manager' as const, branchId: branchBySlug.baumanskaya.id },
+    { email: 'manager.novoslobodskaya@xarizma.ru', name: 'Смирнова Елена', role: 'senior_manager' as const, branchId: branchBySlug.novoslobodskaya.id },
+    { email: 'manager.lubyanka@xarizma.ru', name: 'Волков Алексей', role: 'shift_manager' as const, branchId: branchBySlug.lubyanka.id },
+    { email: 'manager.rublevka@xarizma.ru', name: 'Новикова Мария', role: 'shift_manager' as const, branchId: branchBySlug.rublevka.id },
+  ];
+
+  let usersInserted = 0;
+  for (const user of usersData) {
+    const result = await db.insert(schema.users)
+      .values({ ...user, passwordHash })
+      .onConflictDoNothing({ target: schema.users.email })
+      .returning();
+    if (result.length > 0) usersInserted++;
+  }
+  console.log(`  ✅ Users: ${usersData.length} total (${usersInserted} new)`);
 
   console.log('\n✅ Seed completed successfully!');
   await pool.end();

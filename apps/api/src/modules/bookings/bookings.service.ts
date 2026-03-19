@@ -45,7 +45,16 @@ export class BookingsService {
     return booking;
   }
 
-  async getCalendar(branchId: number, dateFrom: string, dateTo: string) {
+  async getCalendar(branchId: number | undefined, dateFrom: string, dateTo: string) {
+    const conditions: any[] = [
+      gte(bookings.startTime, new Date(dateFrom)),
+      lte(bookings.endTime, new Date(dateTo)),
+      ne(bookings.status, 'cancelled'),
+    ];
+    if (branchId) {
+      conditions.push(eq(bookings.branchId, branchId));
+    }
+
     const result = await this.db.select({
       id: bookings.id,
       roomId: bookings.roomId,
@@ -61,13 +70,8 @@ export class BookingsService {
       totalPrice: bookings.totalPrice,
     })
     .from(bookings)
-    .innerJoin(rooms, eq(bookings.roomId, rooms.id))
-    .where(and(
-      eq(bookings.branchId, branchId),
-      gte(bookings.startTime, new Date(dateFrom)),
-      lte(bookings.endTime, new Date(dateTo)),
-      ne(bookings.status, 'cancelled'),
-    ));
+    .leftJoin(rooms, eq(bookings.roomId, rooms.id))
+    .where(and(...conditions));
 
     return result;
   }
@@ -147,23 +151,25 @@ export class BookingsService {
     if (data.startTime) updateData.startTime = new Date(data.startTime);
     if (data.endTime) updateData.endTime = new Date(data.endTime);
 
-    // If times changed, check conflicts
+    // If times changed, check conflicts (only if room is assigned)
     if (data.startTime || data.endTime) {
       const existing = await this.findById(id);
-      const start = data.startTime ? new Date(data.startTime) : existing.startTime;
-      const end = data.endTime ? new Date(data.endTime) : existing.endTime;
+      if (existing.roomId) {
+        const start = data.startTime ? new Date(data.startTime) : existing.startTime;
+        const end = data.endTime ? new Date(data.endTime) : existing.endTime;
 
-      const bufferMs = BUFFER_MINUTES * 60 * 1000;
-      const conflicts = await this.db.select().from(bookings).where(and(
-        eq(bookings.roomId, existing.roomId),
-        ne(bookings.id, id),
-        ne(bookings.status, 'cancelled'),
-        lt(bookings.startTime, new Date(end.getTime() + bufferMs)),
-        gt(bookings.endTime, new Date(start.getTime() - bufferMs)),
-      ));
+        const bufferMs = BUFFER_MINUTES * 60 * 1000;
+        const conflicts = await this.db.select().from(bookings).where(and(
+          eq(bookings.roomId, existing.roomId),
+          ne(bookings.id, id),
+          ne(bookings.status, 'cancelled'),
+          lt(bookings.startTime, new Date(end.getTime() + bufferMs)),
+          gt(bookings.endTime, new Date(start.getTime() - bufferMs)),
+        ));
 
-      if (conflicts.length > 0) {
-        throw new ConflictException('Новое время пересекается с существующим бронированием');
+        if (conflicts.length > 0) {
+          throw new ConflictException('Новое время пересекается с существующим бронированием');
+        }
       }
     }
 

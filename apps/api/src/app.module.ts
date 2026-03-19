@@ -9,6 +9,9 @@ import { BookingsModule } from './modules/bookings/bookings.module';
 import { SlotsModule } from './modules/slots/slots.module';
 import { UsersModule } from './modules/users/users.module';
 import { GatewayModule } from './gateway/gateway.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { StubsModule } from './modules/stubs/stubs.module';
 
 @Module({
   imports: [
@@ -22,6 +25,9 @@ import { GatewayModule } from './gateway/gateway.module';
     SlotsModule,
     UsersModule,
     GatewayModule,
+    DashboardModule,
+    AnalyticsModule,
+    StubsModule,
   ],
 })
 export class AppModule {}

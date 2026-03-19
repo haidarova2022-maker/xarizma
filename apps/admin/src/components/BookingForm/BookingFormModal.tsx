@@ -174,7 +174,7 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
       setAppliedPromo(null);
       form.setFieldsValue({
         bookingType: 'advance',
-        source: 'chat',
+        source: 'admin',
         ...(prefill?.roomId ? { roomId: prefill.roomId } : {}),
         ...(prefill?.date ? { date: prefill.date } : {}),
         ...(prefill?.timeFrom ? { timeFrom: prefill.timeFrom } : {}),
@@ -328,7 +328,7 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
           guestPhone: values.guestPhone,
           guestEmail: values.guestEmail,
           guestComment: values.guestComment,
-          source: isWalkin ? 'walkin' : 'chat',
+          source: isWalkin ? 'walkin' : 'admin',
           ...(appliedPromo ? { promoCodeId: appliedPromo.id } : {}),
         });
         message.success(isWalkin ? 'Ситуативная бронь создана' : 'Бронирование создано');
@@ -481,10 +481,13 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
             <Form.Item name="status" label="Статус">
               <Select
                 options={[
-                  { value: 'preliminary', label: 'Предварительная' },
-                  { value: 'paid', label: 'Оплачена' },
+                  { value: 'new', label: 'Новая' },
+                  { value: 'awaiting_payment', label: 'Ожидает оплаты' },
+                  { value: 'partially_paid', label: 'Частичная оплата' },
+                  { value: 'fully_paid', label: 'Оплачена' },
+                  { value: 'walkin', label: 'Walk-in' },
                   { value: 'completed', label: 'Завершена' },
-                  { value: 'cancelled', label: 'Отказ' },
+                  { value: 'cancelled', label: 'Отменена' },
                 ]}
               />
             </Form.Item>

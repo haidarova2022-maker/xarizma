@@ -96,7 +96,7 @@ export const priceRules = pgTable('price_rules', {
 export const bookings = pgTable('bookings', {
   id: serial('id').primaryKey(),
   branchId: integer('branch_id').notNull().references(() => branches.id),
-  roomId: integer('room_id').notNull().references(() => rooms.id),
+  roomId: integer('room_id').references(() => rooms.id),
   bookingType: bookingTypeEnum('booking_type').notNull(),
   status: bookingStatusEnum('status').notNull().default('new'),
   startTime: timestamp('start_time').notNull(),

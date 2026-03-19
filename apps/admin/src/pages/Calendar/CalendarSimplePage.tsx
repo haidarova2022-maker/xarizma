@@ -18,9 +18,12 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  preliminary: '#FFCC80',
-  paid: '#4CAF50',
-  completed: '#64B5F6',
+  new: '#2196F3',
+  awaiting_payment: '#FF9800',
+  partially_paid: '#FFC107',
+  fully_paid: '#4CAF50',
+  walkin: '#00BCD4',
+  completed: '#9C27B0',
   cancelled: '#EF9A9A',
 };
 
@@ -123,10 +126,13 @@ export default function CalendarSimplePage() {
     return h - GRID_START_HOUR;
   }, [date, todayHoursCount]);
 
+  // Bookings without room_id — shown in a virtual "Без зала" row
+  const noRoomBookings = useMemo(() => bookings.filter((b: any) => !b.roomId), [bookings]);
+
   // Get all bookings for a room as positioned overlays
-  const getRoomBookings = useCallback((roomId: number) => {
+  const getRoomBookings = useCallback((roomId: number | null) => {
     return bookings
-      .filter((b: any) => b.roomId === roomId)
+      .filter((b: any) => roomId === null ? !b.roomId : b.roomId === roomId)
       .map((b: any) => {
         const bStart = dayjs(b.startTime);
         const bEnd = dayjs(b.endTime);
@@ -254,7 +260,6 @@ export default function CalendarSimplePage() {
             {/* Room rows */}
             {rooms.map((room: any) => {
               const roomBookings = getRoomBookings(room.id);
-              const roomBranch = branches.find((b: any) => b.id === room.branchId);
               return (
                 <div key={room.id} style={{ display: 'flex', borderBottom: '1px solid #f5f5f5', alignItems: 'stretch' }}>
                   <div style={{ width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0', position: 'sticky', left: 0, zIndex: 5, backgroundColor: '#fff' }}>
@@ -298,7 +303,6 @@ export default function CalendarSimplePage() {
                       const width = (b.gridTo - b.gridFrom) * CELL_W - 4;
                       const bStart = dayjs(b.startTime);
                       const bEnd = dayjs(b.endTime);
-                      const bookingBranch = branches.find((br: any) => br.id === b.branchId);
                       return (
                         <div
                           key={b.id}
@@ -328,11 +332,6 @@ export default function CalendarSimplePage() {
                           <span style={{ fontSize: 8, color: '#555', lineHeight: '11px', whiteSpace: 'nowrap' }}>
                             {bStart.format('HH:mm')}–{bEnd.format('HH:mm')}
                           </span>
-                          {bookingBranch?.address && width > 100 && (
-                            <span style={{ fontSize: 7, color: '#666', lineHeight: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
-                              {bookingBranch.address}
-                            </span>
-                          )}
                         </div>
                       );
                     })}
@@ -340,6 +339,54 @@ export default function CalendarSimplePage() {
                 </div>
               );
             })}
+
+            {/* "Без зала" row for bookings with NULL room_id */}
+            {noRoomBookings.length > 0 && (() => {
+              const noRoomOverlays = getRoomBookings(null);
+              return (
+                <div style={{ display: 'flex', borderBottom: '1px solid #f5f5f5', alignItems: 'stretch' }}>
+                  <div style={{ width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0', position: 'sticky', left: 0, zIndex: 5, backgroundColor: '#FFF7E6' }}>
+                    <div style={{ fontWeight: 600, fontSize: 12, lineHeight: '16px', color: '#ad6800' }}>Без зала</div>
+                    <div style={{ color: '#ad6800', fontSize: 10, marginTop: 2 }}>{noRoomBookings.length} брон.</div>
+                  </div>
+                  <div style={{ position: 'relative', display: 'flex', flex: 1 }}>
+                    {gridIndices.map(gi => (
+                      <div key={gi} style={{
+                        width: CELL_W, flexShrink: 0, minHeight: 36,
+                        borderLeft: gi === todayHoursCount ? '2px solid #d9d9d9' : 'none',
+                        backgroundColor: '#FFFBE6',
+                      }} />
+                    ))}
+                    {noRoomOverlays.map((b: any) => {
+                      const left = b.gridFrom * CELL_W + 2;
+                      const width = (b.gridTo - b.gridFrom) * CELL_W - 4;
+                      const bStart = dayjs(b.startTime);
+                      const bEnd = dayjs(b.endTime);
+                      return (
+                        <div
+                          key={b.id}
+                          onClick={() => setSelectedBooking(b)}
+                          style={{
+                            position: 'absolute', left, width, top: 4, bottom: 4,
+                            borderRadius: 4, backgroundColor: STATUS_COLORS[b.status] || '#ddd',
+                            border: '1px solid rgba(0,0,0,0.1)', cursor: 'pointer', zIndex: 2,
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                            overflow: 'hidden', padding: '0 2px',
+                          }}
+                        >
+                          <span style={{ fontSize: 10, fontWeight: 600, color: '#333', lineHeight: '13px', whiteSpace: 'nowrap' }}>
+                            {b.guestName?.split(' ')[0]}
+                          </span>
+                          <span style={{ fontSize: 8, color: '#555', lineHeight: '11px', whiteSpace: 'nowrap' }}>
+                            {bStart.format('HH:mm')}–{bEnd.format('HH:mm')}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

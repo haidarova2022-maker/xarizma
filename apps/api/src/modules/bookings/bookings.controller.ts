@@ -26,11 +26,15 @@ export class BookingsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   getCalendar(
-    @Query('branchId', ParseIntPipe) branchId: number,
-    @Query('dateFrom') dateFrom: string,
-    @Query('dateTo') dateTo: string,
+    @Query('branchId') branchId?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
   ) {
-    return this.bookingsService.getCalendar(branchId, dateFrom, dateTo);
+    return this.bookingsService.getCalendar(
+      branchId ? parseInt(branchId) : undefined,
+      dateFrom || new Date().toISOString(),
+      dateTo || new Date().toISOString(),
+    );
   }
 
   @Get('available-slots')
@@ -41,6 +45,11 @@ export class BookingsController {
     @Query('category') category?: string,
   ) {
     return this.bookingsService.getAvailableSlots(branchId, date, guestCount, category);
+  }
+
+  @Get(':id/history')
+  getHistory(@Param('id', ParseIntPipe) _id: number) {
+    return [];
   }
 
   @Get(':id')

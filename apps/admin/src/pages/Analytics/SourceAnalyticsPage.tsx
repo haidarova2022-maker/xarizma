@@ -9,16 +9,14 @@ const { Title, Text } = Typography;
 
 const SOURCE_LABELS: Record<string, string> = {
   widget: 'Виджет',
-  manager: 'Менеджер',
-  chat: 'Чат',
+  admin: 'Менеджер',
   phone: 'Телефон',
   walkin: 'Walk-in',
 };
 
 const SOURCE_COLORS: Record<string, string> = {
   widget: '#49BCCB',
-  manager: '#E36FA8',
-  chat: '#E36FA8',
+  admin: '#E36FA8',
   phone: '#FDCB6E',
   walkin: '#00B894',
 };
