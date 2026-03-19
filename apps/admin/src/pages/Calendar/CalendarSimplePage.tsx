@@ -14,7 +14,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   vibe: 'Вайб',
   flex: 'Флекс',
   full_gas: 'Полный газ',
-  common: 'Общий зал',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -27,10 +26,21 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: '#EF9A9A',
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  new: 'Новая',
+  awaiting_payment: 'Ожидает оплаты',
+  partially_paid: 'Частичная оплата',
+  fully_paid: 'Оплачена',
+  walkin: 'Walk-in',
+  completed: 'Завершена',
+  cancelled: 'Отменена',
+};
+
 const GRID_START_HOUR = 9;
 const GRID_TOTAL = 36;
 const CELL_W = 40;
-const ROOM_COL = 100;
+const ROOM_COL = 120;
+const LANE_HEIGHT = 44;
 
 function gridToHour(grid: number): number {
   return (GRID_START_HOUR + grid) % 24;
@@ -42,6 +52,22 @@ function getDayType(date: Dayjs, hour: number): string {
   if (dow === 6) return 'saturday';
   if (dow === 5) return hour < 17 ? 'friday_day' : 'friday_evening';
   return hour < 17 ? 'weekday_day' : 'weekday_evening';
+}
+
+/** Assign non-overlapping lanes to bookings */
+function assignLanes(overlays: any[]): { maxLane: number; items: any[] } {
+  const sorted = [...overlays].sort((a, b) => a.gridFrom - b.gridFrom);
+  const laneEnds: number[] = [];
+  const items = sorted.map(b => {
+    let lane = laneEnds.findIndex(end => end <= b.gridFrom);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(0);
+    }
+    laneEnds[lane] = b.gridTo;
+    return { ...b, lane };
+  });
+  return { maxLane: laneEnds.length, items };
 }
 
 export default function CalendarSimplePage() {
@@ -89,11 +115,11 @@ export default function CalendarSimplePage() {
     return (isNextDay ? nextDay : date).hour(h).minute(0).second(0);
   }, [date, nextDay, todayHoursCount]);
 
-  const handleCellClick = useCallback((roomId: number, gridIdx: number, booking?: any) => {
+  const handleCellClick = useCallback((roomId: number | null, gridIdx: number, booking?: any) => {
     if (booking) {
       setPrefill(undefined);
       setSelectedBooking(booking);
-    } else {
+    } else if (roomId) {
       setPrefill({
         roomId,
         date: gridToDayjs(gridIdx),
@@ -116,7 +142,6 @@ export default function CalendarSimplePage() {
     return rule?.pricePerHour || 0;
   };
 
-  // Convert a booking datetime to grid position (fractional hours from GRID_START_HOUR)
   const dayjsToGrid = useCallback((dt: Dayjs): number => {
     const isNextDay = dt.isAfter(date.endOf('day'));
     const h = dt.hour() + dt.minute() / 60;
@@ -126,11 +151,9 @@ export default function CalendarSimplePage() {
     return h - GRID_START_HOUR;
   }, [date, todayHoursCount]);
 
-  // Bookings without room_id — shown in a virtual "Без зала" row
   const noRoomBookings = useMemo(() => bookings.filter((b: any) => !b.roomId), [bookings]);
 
-  // Get all bookings for a room as positioned overlays
-  const getRoomBookings = useCallback((roomId: number | null) => {
+  const getOverlays = useCallback((roomId: number | null) => {
     return bookings
       .filter((b: any) => roomId === null ? !b.roomId : b.roomId === roomId)
       .map((b: any) => {
@@ -159,6 +182,60 @@ export default function CalendarSimplePage() {
   const todayIsDayOff = branch?.workingHours
     ? isDayFullyClosed(branch.workingHours, date, GRID_START_HOUR, 23)
     : false;
+
+  // Compute lanes for "Без зала" row
+  const noRoomOverlays = useMemo(() => getOverlays(null), [getOverlays]);
+  const { maxLane: noRoomLanes, items: noRoomLaned } = useMemo(() => assignLanes(noRoomOverlays), [noRoomOverlays]);
+
+  /** Render a booking overlay block */
+  const renderBooking = (b: any, laneOffset = 0, totalLanes = 1) => {
+    const left = b.gridFrom * CELL_W + 2;
+    const width = (b.gridTo - b.gridFrom) * CELL_W - 4;
+    const bStart = dayjs(b.startTime);
+    const bEnd = dayjs(b.endTime);
+    const top = laneOffset * LANE_HEIGHT + 2;
+    const height = LANE_HEIGHT - 4;
+    return (
+      <div
+        key={b.id}
+        onClick={() => handleCellClick(b.roomId || null, Math.floor(b.gridFrom), b)}
+        title={`${b.guestName || '—'} | ${bStart.format('HH:mm')}–${bEnd.format('HH:mm')} | ${STATUS_LABELS[b.status] || b.status} | ${b.guestCount || '?'} чел. | ${b.totalPrice ? (b.totalPrice / 1000).toFixed(1) + 'k' : '—'}`}
+        style={{
+          position: 'absolute',
+          left,
+          width: Math.max(width, 30),
+          top,
+          height,
+          borderRadius: 6,
+          backgroundColor: STATUS_COLORS[b.status] || '#ddd',
+          border: '1px solid rgba(0,0,0,0.15)',
+          cursor: 'pointer',
+          zIndex: 2,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          padding: '0 3px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 600, color: '#fff', lineHeight: '14px', whiteSpace: 'nowrap', textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
+          {b.guestName?.split(' ')[0] || '—'}
+        </span>
+        <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.9)', lineHeight: '12px', whiteSpace: 'nowrap', textShadow: '0 1px 1px rgba(0,0,0,0.2)' }}>
+          {bStart.format('HH:mm')}–{bEnd.format('HH:mm')}
+        </span>
+        {width > 80 && (
+          <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.8)', lineHeight: '10px' }}>
+            {b.guestCount || '?'} чел.
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const gridWidth = GRID_TOTAL * CELL_W + ROOM_COL;
 
   return (
     <div>
@@ -195,6 +272,9 @@ export default function CalendarSimplePage() {
             {date.format('dd, D MMM')}
           </span>
           <Button size="small" icon={<RightOutlined />} onClick={() => setDate(d => d.add(1, 'day'))} />
+          <Button size="small" onClick={() => setDate(dayjs().startOf('day'))} style={{ marginLeft: 8 }}>
+            Сегодня
+          </Button>
         </div>
       </div>
 
@@ -211,34 +291,45 @@ export default function CalendarSimplePage() {
         </div>
       )}
 
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        {Object.entries(STATUS_LABELS).filter(([k]) => k !== 'cancelled').map(([key, label]) => (
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: STATUS_COLORS[key] }} />
+            <span style={{ fontSize: 11, color: '#666' }}>{label}</span>
+          </div>
+        ))}
+      </div>
+
       {loading ? (
         <div style={{ textAlign: 'center', padding: 64 }}><Spin size="large" /></div>
-      ) : rooms.length === 0 ? (
-        <Empty description="Нет залов для выбранного филиала" />
+      ) : rooms.length === 0 && noRoomBookings.length === 0 ? (
+        <Empty description="Нет залов и бронирований для выбранного филиала" />
       ) : (
-        <div style={{ overflowX: 'auto', position: 'relative' }}>
-          <div style={{ minWidth: GRID_TOTAL * CELL_W + ROOM_COL }}>
-            {/* Date row — sticky top */}
+        /* Scrollable calendar container — headers stick inside it */
+        <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 280px)', border: '1px solid #e8e8e8', borderRadius: 8 }}>
+          <div style={{ minWidth: gridWidth }}>
+            {/* Date row — sticky */}
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, backgroundColor: '#fff' }}>
               <div style={{ width: ROOM_COL, flexShrink: 0, position: 'sticky', left: 0, zIndex: 13, backgroundColor: '#fff' }} />
               <div style={{
                 width: todayHoursCount * CELL_W, flexShrink: 0, textAlign: 'center', padding: '4px 0',
                 fontWeight: 600, fontSize: 13, color: '#333', backgroundColor: '#F9F8FF',
-                borderBottom: '2px solid #E36FA8', borderRadius: '6px 6px 0 0',
+                borderBottom: '2px solid #E36FA8',
               }}>
                 {date.format('dd, D MMMM')}
               </div>
               <div style={{
                 width: (GRID_TOTAL - todayHoursCount) * CELL_W, flexShrink: 0, textAlign: 'center', padding: '4px 0',
                 fontWeight: 600, fontSize: 13, color: '#666', backgroundColor: '#FAFAFA',
-                borderBottom: '2px solid #d9d9d9', borderRadius: '6px 6px 0 0',
+                borderBottom: '2px solid #d9d9d9',
               }}>
                 {nextDay.format('dd, D MMMM')}
               </div>
             </div>
 
-            {/* Hours row — sticky top below date row */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #e8e8e8', position: 'sticky', top: 28, zIndex: 12, backgroundColor: '#fff' }}>
+            {/* Hours row — sticky below date */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #e8e8e8', position: 'sticky', top: 26, zIndex: 12, backgroundColor: '#fff' }}>
               <div style={{ width: ROOM_COL, flexShrink: 0, padding: '6px 8px', fontSize: 11, color: '#8c8c8c', fontWeight: 500, position: 'sticky', left: 0, zIndex: 13, backgroundColor: '#fff' }}>
                 Зал
               </div>
@@ -257,9 +348,36 @@ export default function CalendarSimplePage() {
               })}
             </div>
 
+            {/* === "Без зала" rows at the TOP === */}
+            {noRoomBookings.length > 0 && (
+              <div style={{ display: 'flex', borderBottom: '2px solid #E36FA8', alignItems: 'stretch', backgroundColor: '#FFF7E6' }}>
+                <div style={{
+                  width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0',
+                  position: 'sticky', left: 0, zIndex: 5, backgroundColor: '#FFF7E6',
+                }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, lineHeight: '16px', color: '#ad6800' }}>Бронирования</div>
+                  <div style={{ color: '#ad6800', fontSize: 11, marginTop: 2 }}>{noRoomBookings.length} на день</div>
+                  <div style={{ color: '#d48806', fontSize: 10, marginTop: 2 }}>Зал не назначен</div>
+                </div>
+                <div style={{ position: 'relative', display: 'flex', flex: 1, minHeight: Math.max(1, noRoomLanes) * LANE_HEIGHT }}>
+                  {/* Background grid */}
+                  {gridIndices.map(gi => (
+                    <div key={gi} style={{
+                      width: CELL_W, flexShrink: 0,
+                      borderLeft: gi === todayHoursCount ? '2px solid #d9d9d9' : 'none',
+                      backgroundColor: gi % 2 === 0 ? '#FFFBE6' : '#FFF7E6',
+                    }} />
+                  ))}
+                  {/* Booking overlays with lanes */}
+                  {noRoomLaned.map((b: any) => renderBooking(b, b.lane, noRoomLanes))}
+                </div>
+              </div>
+            )}
+
             {/* Room rows */}
             {rooms.map((room: any) => {
-              const roomBookings = getRoomBookings(room.id);
+              const overlays = getOverlays(room.id);
+              const { maxLane, items: lanedItems } = assignLanes(overlays);
               return (
                 <div key={room.id} style={{ display: 'flex', borderBottom: '1px solid #f5f5f5', alignItems: 'stretch' }}>
                   <div style={{ width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0', position: 'sticky', left: 0, zIndex: 5, backgroundColor: '#fff' }}>
@@ -270,7 +388,7 @@ export default function CalendarSimplePage() {
                     <div style={{ color: '#8c8c8c', fontSize: 10, marginTop: 2 }}>до {room.capacityMax} чел.</div>
                   </div>
 
-                  <div style={{ position: 'relative', display: 'flex', flex: 1 }}>
+                  <div style={{ position: 'relative', display: 'flex', flex: 1, minHeight: Math.max(1, maxLane) * LANE_HEIGHT }}>
                     {/* Background cells (prices, closed) */}
                     {gridIndices.map(gi => {
                       const price = getPrice(room.category, gi);
@@ -297,96 +415,12 @@ export default function CalendarSimplePage() {
                       );
                     })}
 
-                    {/* Booking overlays — pixel-precise positioning */}
-                    {roomBookings.map((b: any) => {
-                      const left = b.gridFrom * CELL_W + 2;
-                      const width = (b.gridTo - b.gridFrom) * CELL_W - 4;
-                      const bStart = dayjs(b.startTime);
-                      const bEnd = dayjs(b.endTime);
-                      return (
-                        <div
-                          key={b.id}
-                          onClick={() => handleCellClick(room.id, Math.floor(b.gridFrom), b)}
-                          style={{
-                            position: 'absolute',
-                            left,
-                            width,
-                            top: 4,
-                            bottom: 4,
-                            borderRadius: 4,
-                            backgroundColor: STATUS_COLORS[b.status] || '#ddd',
-                            border: '1px solid rgba(0,0,0,0.1)',
-                            cursor: 'pointer',
-                            zIndex: 2,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            overflow: 'hidden',
-                            padding: '0 2px',
-                          }}
-                        >
-                          <span style={{ fontSize: 10, fontWeight: 600, color: '#333', lineHeight: '13px', whiteSpace: 'nowrap' }}>
-                            {b.guestName?.split(' ')[0]}
-                          </span>
-                          <span style={{ fontSize: 8, color: '#555', lineHeight: '11px', whiteSpace: 'nowrap' }}>
-                            {bStart.format('HH:mm')}–{bEnd.format('HH:mm')}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    {/* Booking overlays with lanes */}
+                    {lanedItems.map((b: any) => renderBooking(b, b.lane, maxLane))}
                   </div>
                 </div>
               );
             })}
-
-            {/* "Без зала" row for bookings with NULL room_id */}
-            {noRoomBookings.length > 0 && (() => {
-              const noRoomOverlays = getRoomBookings(null);
-              return (
-                <div style={{ display: 'flex', borderBottom: '1px solid #f5f5f5', alignItems: 'stretch' }}>
-                  <div style={{ width: ROOM_COL, flexShrink: 0, padding: '8px 8px', borderRight: '1px solid #f0f0f0', position: 'sticky', left: 0, zIndex: 5, backgroundColor: '#FFF7E6' }}>
-                    <div style={{ fontWeight: 600, fontSize: 12, lineHeight: '16px', color: '#ad6800' }}>Без зала</div>
-                    <div style={{ color: '#ad6800', fontSize: 10, marginTop: 2 }}>{noRoomBookings.length} брон.</div>
-                  </div>
-                  <div style={{ position: 'relative', display: 'flex', flex: 1 }}>
-                    {gridIndices.map(gi => (
-                      <div key={gi} style={{
-                        width: CELL_W, flexShrink: 0, minHeight: 36,
-                        borderLeft: gi === todayHoursCount ? '2px solid #d9d9d9' : 'none',
-                        backgroundColor: '#FFFBE6',
-                      }} />
-                    ))}
-                    {noRoomOverlays.map((b: any) => {
-                      const left = b.gridFrom * CELL_W + 2;
-                      const width = (b.gridTo - b.gridFrom) * CELL_W - 4;
-                      const bStart = dayjs(b.startTime);
-                      const bEnd = dayjs(b.endTime);
-                      return (
-                        <div
-                          key={b.id}
-                          onClick={() => setSelectedBooking(b)}
-                          style={{
-                            position: 'absolute', left, width, top: 4, bottom: 4,
-                            borderRadius: 4, backgroundColor: STATUS_COLORS[b.status] || '#ddd',
-                            border: '1px solid rgba(0,0,0,0.1)', cursor: 'pointer', zIndex: 2,
-                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                            overflow: 'hidden', padding: '0 2px',
-                          }}
-                        >
-                          <span style={{ fontSize: 10, fontWeight: 600, color: '#333', lineHeight: '13px', whiteSpace: 'nowrap' }}>
-                            {b.guestName?.split(' ')[0]}
-                          </span>
-                          <span style={{ fontSize: 8, color: '#555', lineHeight: '11px', whiteSpace: 'nowrap' }}>
-                            {bStart.format('HH:mm')}–{bEnd.format('HH:mm')}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
           </div>
         </div>
       )}

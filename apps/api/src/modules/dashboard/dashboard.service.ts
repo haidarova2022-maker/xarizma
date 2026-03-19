@@ -14,9 +14,9 @@ export class DashboardService {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
 
-    // Previous year same month
+    // Previous year same period (same number of days for fair LFL comparison)
     const prevMonthStart = new Date(now.getFullYear() - 1, now.getMonth(), 1);
-    const prevMonthEnd = new Date(now.getFullYear() - 1, now.getMonth() + 1, 0, 23, 59, 59);
+    const prevMonthEnd = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate(), 23, 59, 59);
 
     const bf = branchId ? sql`AND branch_id = ${branchId}` : sql``;
 
