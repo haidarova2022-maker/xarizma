@@ -104,6 +104,7 @@ export class AnalyticsService {
     }
 
     // Branch-level analytics (when room_id is NULL — Bitrix data)
+    // Always show all branches for comparison, even if a specific branch is selected
     const result = await this.db.execute(sql`
       SELECT
         br.id AS room_id,
@@ -117,7 +118,6 @@ export class AnalyticsService {
       LEFT JOIN bookings b ON b.branch_id = br.id
         AND b.start_time >= ${monthStart.toISOString()}
         AND b.status != 'cancelled'
-      ${branchId ? sql`WHERE br.id = ${branchId}` : sql``}
       GROUP BY br.id, br.name
       ORDER BY bookings DESC
     `);

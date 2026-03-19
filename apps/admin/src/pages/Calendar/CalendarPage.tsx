@@ -392,6 +392,7 @@ export default function CalendarPage() {
   const [roomSlots, setRoomSlots] = useState<RoomSlots>({});
   const [slotCfg, setSlotCfg] = useState<SlotConfig>({ startHour: 9, slotDuration: 3, gapHours: 1 });
   const [slotsVisible, setSlotsVisible] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const nextDay = useMemo(() => date.add(1, 'day'), [date]);
   const branch = branches.find((b: any) => b.id === selectedBranchId);
@@ -430,13 +431,28 @@ export default function CalendarPage() {
         newSlots[r.id] = roomSlots[r.id] || defaultSlots.map(s => ({ ...s }));
       }
       setRoomSlots(newSlots);
-    } catch {
+    } catch (err) {
+      console.error('[Calendar] loadData error:', err);
+      message.error('Ошибка загрузки данных календаря');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => { loadData(); }, [selectedBranchId, date]);
+
+  // Auto-scroll to current time on data load
+  useEffect(() => {
+    if (!loading && bookings.length > 0 && scrollRef.current) {
+      const now = dayjs();
+      const h = now.hour() + now.minute() / 60;
+      const gridPos = h - gridStartHour;
+      if (gridPos >= 0 && gridPos < gridTotal) {
+        const scrollLeft = Math.max(0, gridPos * CELL_W - 200);
+        scrollRef.current.scrollLeft = scrollLeft;
+      }
+    }
+  }, [loading, bookings.length]);
 
   const onBookingCreated = () => { setShowForm(false); loadData(); };
 
@@ -583,7 +599,16 @@ export default function CalendarPage() {
       {/* Title + date nav */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>{selectedBranchId === 0 ? 'Все филиалы' : branchShortName}</Title>
+        {bookings.length > 0 && (
+          <span style={{
+            padding: '2px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600,
+            backgroundColor: '#E36FA8', color: '#fff',
+          }}>
+            {bookings.length} бр.
+          </span>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
+          <Button size="small" onClick={() => setDate(dayjs().startOf('day'))}>Сегодня</Button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Switch size="small" checked={slotsVisible} onChange={setSlotsVisible} />
             <span style={{ fontSize: 12, color: '#8c8c8c' }}>Слоты</span>
@@ -616,13 +641,45 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {/* Status legend */}
+      {!loading && bookings.length > 0 && (
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+          {Object.entries(STATUS_LABELS).filter(([k]) => k !== 'cancelled').map(([key, label]) => (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: STATUS_COLORS[key] }} />
+              <span style={{ fontSize: 11, color: '#666' }}>{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <div style={{ textAlign: 'center', padding: 64 }}><Spin size="large" /></div>
-      ) : rooms.length === 0 ? (
-        <Empty description="Нет залов для выбранного филиала" />
+      ) : rooms.length === 0 && bookings.length === 0 ? (
+        <Empty description="Нет данных для выбранного филиала" />
       ) : (
-        <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)', border: '1px solid #e8e8e8', borderRadius: 8 }}>
-          <div style={{ minWidth: gridTotal * CELL_W + ROOM_COL }}>
+        <div ref={scrollRef} style={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)', border: '1px solid #e8e8e8', borderRadius: 8 }}>
+          <div style={{ minWidth: gridTotal * CELL_W + ROOM_COL, position: 'relative' }}>
+            {/* Now indicator line */}
+            {date.isSame(dayjs(), 'day') && (() => {
+              const now = dayjs();
+              const h = now.hour() + now.minute() / 60;
+              const nowGrid = h - gridStartHour;
+              if (nowGrid >= 0 && nowGrid < gridTotal) {
+                return (
+                  <div style={{
+                    position: 'absolute', left: ROOM_COL + nowGrid * CELL_W, top: 0, bottom: 0,
+                    width: 2, backgroundColor: '#ff4d4f', zIndex: 20, pointerEvents: 'none', opacity: 0.7,
+                  }}>
+                    <div style={{
+                      position: 'absolute', top: 0, left: -4, width: 10, height: 10,
+                      backgroundColor: '#ff4d4f', borderRadius: '50%',
+                    }} />
+                  </div>
+                );
+              }
+              return null;
+            })()}
             {/* Date row — sticky */}
             <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 12, backgroundColor: '#fff' }}>
               <div style={{ width: ROOM_COL, flexShrink: 0, position: 'sticky', left: 0, zIndex: 13, backgroundColor: '#fff' }} />
