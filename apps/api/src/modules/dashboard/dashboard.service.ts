@@ -30,7 +30,8 @@ export class DashboardService {
         COUNT(*) FILTER (WHERE status IN ('new', 'awaiting_payment'))::int AS leads,
         COUNT(*) FILTER (WHERE status IN ('fully_paid', 'completed'))::int AS conversions
       FROM bookings
-      WHERE start_time >= ${monthStart.toISOString()} AND start_time <= ${now.toISOString()} ${bf}
+      WHERE start_time >= ${monthStart.toISOString()} AND start_time <= ${now.toISOString()}
+        AND status != 'cancelled' ${bf}
     `);
 
     // Today
@@ -40,7 +41,8 @@ export class DashboardService {
         COALESCE(SUM(guest_count), 0)::int AS guests,
         COUNT(*) FILTER (WHERE status IN ('new', 'awaiting_payment'))::int AS leads
       FROM bookings
-      WHERE start_time >= ${todayStart.toISOString()} AND start_time <= ${todayEnd.toISOString()} ${bf}
+      WHERE start_time >= ${todayStart.toISOString()} AND start_time <= ${todayEnd.toISOString()}
+        AND status != 'cancelled' ${bf}
     `);
 
     // Previous year same month
@@ -53,7 +55,8 @@ export class DashboardService {
         COUNT(*) FILTER (WHERE status IN ('new', 'awaiting_payment'))::int AS leads,
         COUNT(*) FILTER (WHERE status IN ('fully_paid', 'completed'))::int AS conversions
       FROM bookings
-      WHERE start_time >= ${prevMonthStart.toISOString()} AND start_time <= ${prevMonthEnd.toISOString()} ${bf}
+      WHERE start_time >= ${prevMonthStart.toISOString()} AND start_time <= ${prevMonthEnd.toISOString()}
+        AND status != 'cancelled' ${bf}
     `);
 
     const m = (monthRes as any).rows[0];

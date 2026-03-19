@@ -374,7 +374,7 @@ export default function BookingFormModal({ open, booking, prefill, onClose, onSu
       title={
         <div onMouseDown={onDragStart} style={{ cursor: 'grab', display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none' }}>
           <DragOutlined style={{ color: '#bbb', fontSize: 12 }} />
-          {booking ? `Бронирование #${booking.id}` : 'Новое бронирование'}
+          {booking ? `#${booking.id}${booking.roomName ? ` · ${booking.roomName}` : ''}${booking.branchName ? ` · ${booking.branchName}` : ''}` : 'Новое бронирование'}
         </div>
       }
       open={open}

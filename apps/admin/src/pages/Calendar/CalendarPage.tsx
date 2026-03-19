@@ -557,7 +557,7 @@ export default function CalendarPage() {
     const isNextDay = dt.isAfter(date.endOf('day'));
     const h = dt.hour() + dt.minute() / 60;
     if (isNextDay) {
-      return todayHoursCount + (h - gridStartHour + 24) % 24;
+      return todayHoursCount + h;
     }
     return h - gridStartHour;
   }, [date, todayHoursCount]);
@@ -948,7 +948,7 @@ export default function CalendarPage() {
                               return (
                                 <div
                                   key={b.id}
-                                  onClick={() => { setPrefill(undefined); setSelectedBooking(b); setShowForm(true); }}
+                                  onClick={() => { setPrefill(undefined); setSelectedBooking({ ...b, branchName: branches.find((br: any) => br.id === b.branchId)?.name?.replace(/^Харизма\s+/, '') }); setShowForm(true); }}
                                   style={{
                                     position: 'absolute',
                                     left,
@@ -1044,7 +1044,7 @@ export default function CalendarPage() {
                     return (
                       <tr
                         key={b.id}
-                        onClick={() => { setPrefill(undefined); setSelectedBooking(b); setShowForm(true); }}
+                        onClick={() => { setPrefill(undefined); setSelectedBooking({ ...b, branchName: branches.find((br: any) => br.id === b.branchId)?.name?.replace(/^Харизма\s+/, '') }); setShowForm(true); }}
                         style={{ cursor: 'pointer', borderBottom: '1px solid #f5f5f5' }}
                         onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f0f0f0')}
                         onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '')}

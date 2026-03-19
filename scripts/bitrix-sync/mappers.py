@@ -66,7 +66,12 @@ def map_deal_to_booking(deal: dict) -> dict | None:
         # Use deal title as fallback name during fast sync
         title = deal.get("TITLE", "")
         if title and title != f"Сделка #{deal_id}":
-            contact_data["name"] = title
+            # If title looks like a phone number, put it in phone field instead
+            digits = title.replace("+", "").replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
+            if digits.isdigit() and len(digits) >= 10:
+                contact_data["phone"] = title
+            else:
+                contact_data["name"] = title
 
     # --- Times (from UF_CRM_1690209734961 visit datetime) ---
     start_time = parse_bitrix_datetime(deal.get(FIELD_VISIT_DATETIME))
