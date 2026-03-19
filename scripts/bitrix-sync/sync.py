@@ -10,6 +10,7 @@ from db import (
     get_connection, ensure_schema,
     upsert_bookings_batch, get_sync_state, set_sync_state, get_booking_count,
 )
+from assign_rooms import run_room_assignment
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +123,12 @@ def run_full_sync(dry_run: bool = False, limit: int | None = None):
         conn.close()
         logger.info(f"Total Bitrix bookings in DB: {total_in_db}")
 
+    # Auto-assign rooms to new bookings
+    try:
+        run_room_assignment()
+    except Exception as e:
+        logger.error(f"Room assignment failed: {e}")
+
     logger.info(f"=== FULL SYNC DONE === {result}")
     return result
 
@@ -161,6 +168,13 @@ def run_incremental_sync(dry_run: bool = False, limit: int | None = None):
     conn.close()
 
     logger.info(f"Total Bitrix bookings in DB: {total_in_db}")
+
+    # Auto-assign rooms to new bookings
+    try:
+        run_room_assignment()
+    except Exception as e:
+        logger.error(f"Room assignment failed: {e}")
+
     logger.info(f"=== INCREMENTAL SYNC DONE === {result}")
     return result
 

@@ -662,6 +662,21 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {/* DEBUG PANEL - always visible */}
+      <div style={{
+        padding: '8px 16px', marginBottom: 8, borderRadius: 8,
+        backgroundColor: bookings.length > 0 ? '#f6ffed' : '#fff7e6',
+        border: `1px solid ${bookings.length > 0 ? '#b7eb8f' : '#ffe58f'}`,
+        fontSize: 13,
+      }}>
+        <strong>Данные:</strong>{' '}
+        Бронирований: <strong style={{ color: bookings.length > 0 ? '#52c41a' : '#fa8c16' }}>{bookings.length}</strong> |{' '}
+        Залов: <strong>{rooms.length}</strong> |{' '}
+        Филиал: <strong>{selectedBranchId === 0 ? 'Все' : selectedBranchId ?? 'null'}</strong> |{' '}
+        Дата: <strong>{date.format('DD.MM.YYYY')}</strong>
+        {loadError && <span style={{ color: '#cf1322', marginLeft: 8 }}>| Ошибка: {loadError}</span>}
+      </div>
+
       {todayIsDayOff && !loading && (
         <div style={{
           padding: '12px 20px', marginBottom: 12, borderRadius: 8,
@@ -1002,8 +1017,8 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* Bookings list — always visible when bookings exist */}
-      {!loading && bookings.length > 0 && (
+      {/* Bookings list — always visible after loading */}
+      {!loading && (
         <div style={{ marginTop: 16, border: '1px solid #e8e8e8', borderRadius: 8, overflow: 'hidden' }}>
           <div style={{ padding: '8px 16px', backgroundColor: '#E36FA8', color: '#fff', fontWeight: 700, fontSize: 14 }}>
             Бронирования на {date.format('D MMMM')} ({bookings.length})
