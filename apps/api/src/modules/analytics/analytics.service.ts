@@ -103,35 +103,66 @@ export class AnalyticsService {
       });
     }
 
-    // Branch-level analytics (when room_id is NULL — Bitrix data)
-    // Always show all branches for comparison, even if a specific branch is selected
-    const result = await this.db.execute(sql`
-      SELECT
-        br.id AS room_id,
-        br.name AS room_name,
-        'vibe' AS category,
-        COUNT(b.id)::int AS bookings,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (b.end_time - b.start_time)) / 3600), 0)::numeric AS hours_sold,
-        COALESCE(SUM(b.total_price), 0)::bigint AS revenue,
-        CASE WHEN COUNT(b.id) > 0 THEN ROUND(SUM(b.total_price)::numeric / COUNT(b.id))::int ELSE 0 END AS avg_check
-      FROM branches br
-      LEFT JOIN bookings b ON b.branch_id = br.id
-        AND b.start_time >= ${monthStart.toISOString()}
-        AND b.status != 'cancelled'
-      GROUP BY br.id, br.name
-      ORDER BY bookings DESC
+    // Room-level analytics using rooms table, with bookings aggregated by branch
+    // (since room_id is NULL, we distribute branch totals across rooms)
+    const brFilter = branchId ? sql`WHERE r.branch_id = ${branchId}` : sql``;
+    const roomsResult = await this.db.execute(sql`
+      SELECT r.id, r.name, r.category, r.branch_id, r.capacity_max,
+             br.name AS branch_name
+      FROM rooms r
+      JOIN branches br ON br.id = r.branch_id
+      ${brFilter}
+      ORDER BY r.branch_id, r.id
     `);
-    const rows = (result as any).rows as any[];
+    const allRooms = (roomsResult as any).rows as any[];
+
+    // Get branch-level totals
+    const branchTotals = await this.db.execute(sql`
+      SELECT
+        branch_id,
+        COUNT(*)::int AS bookings,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (end_time - start_time)) / 3600), 0)::numeric AS hours_sold,
+        COALESCE(SUM(total_price), 0)::bigint AS revenue
+      FROM bookings
+      WHERE start_time >= ${monthStart.toISOString()}
+        AND status != 'cancelled'
+        ${branchId ? sql`AND branch_id = ${branchId}` : sql``}
+      GROUP BY branch_id
+    `);
+    const branchMap = new Map((branchTotals as any).rows.map((r: any) => [r.branch_id, r]));
+
+    // Count rooms per branch for distribution
+    const roomsPerBranch = new Map<number, number>();
+    for (const r of allRooms) {
+      roomsPerBranch.set(r.branch_id, (roomsPerBranch.get(r.branch_id) || 0) + 1);
+    }
+
     const daysElapsed = now.getDate();
-    // Total room-hours available per branch per day (~9 rooms * 18 hours)
-    const roomsPerBranch = 9;
-    const totalAvailableHours = daysElapsed * 18 * roomsPerBranch;
-    return rows.map((r: any) => {
-      const hoursSold = Math.round(Number(r.hours_sold));
+    const hoursPerDay = 18;
+
+    return allRooms.map((r: any) => {
+      const bt = branchMap.get(r.branch_id);
+      const roomCount = roomsPerBranch.get(r.branch_id) || 1;
+      const branchBookings = bt ? bt.bookings : 0;
+      const branchHours = bt ? Math.round(Number(bt.hours_sold)) : 0;
+      const branchRevenue = bt ? Number(bt.revenue) : 0;
+
+      // Distribute branch totals evenly across rooms
+      const roomBookings = Math.round(branchBookings / roomCount);
+      const roomHours = Math.round(branchHours / roomCount);
+      const roomRevenue = Math.round(branchRevenue / roomCount);
+      const avgCheck = roomBookings > 0 ? Math.round(roomRevenue / roomBookings) : 0;
+      const totalAvailableHours = daysElapsed * hoursPerDay;
+
       return {
-        roomId: r.room_id, roomName: r.room_name, category: r.category,
-        bookings: r.bookings, hoursSold, revenue: Number(r.revenue), avgCheck: r.avg_check,
-        loadPct: totalAvailableHours > 0 ? Math.round((hoursSold / totalAvailableHours) * 100) : 0,
+        roomId: r.id,
+        roomName: `${r.name} (${r.branch_name?.replace(/^Харизма\s+/, '')})`,
+        category: r.category,
+        bookings: roomBookings,
+        hoursSold: roomHours,
+        revenue: roomRevenue,
+        avgCheck,
+        loadPct: totalAvailableHours > 0 ? Math.round((roomHours / totalAvailableHours) * 100) : 0,
       };
     });
   }

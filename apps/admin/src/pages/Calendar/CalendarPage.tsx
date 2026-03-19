@@ -406,33 +406,67 @@ export default function CalendarPage() {
   const gridToTime = useMemo(() => makeGridToTime(gridStartHour), []);
   const gridIndices = useMemo(() => Array.from({ length: gridTotal }, (_, i) => i), []);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const loadData = async () => {
     if (selectedBranchId === null) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const dateFrom = date.hour(gridStartHour).minute(0).second(0).toISOString();
       const dateTo = nextDay.hour(20).minute(59).second(59).toISOString();
-      const [calRes, roomsRes, pricingRes, cfgRes] = await Promise.all([
-        getCalendar(selectedBranchId || undefined, dateFrom, dateTo),
-        getRooms(selectedBranchId || undefined),
-        getPricing(),
-        getSlotConfig(),
-      ]);
-      setBookings(calRes.data);
-      setRooms(roomsRes.data);
-      setPricing(pricingRes.data);
+      console.log('[Calendar] Loading:', { selectedBranchId, dateFrom, dateTo });
 
-      const cfg: SlotConfig = cfgRes.data;
-      setSlotCfg(cfg);
-      const defaultSlots = generateSlots(cfg, gridStartHour, gridTotal);
+      // Load each API independently so one failure doesn't break all
+      let calData: any[] = [];
+      let roomsData: any[] = [];
+      let pricingData: any[] = [];
+      let cfgData: SlotConfig = { startHour: 10, slotDuration: 2, gapHours: 0.25 };
 
+      try {
+        const calRes = await getCalendar(selectedBranchId || undefined, dateFrom, dateTo);
+        calData = Array.isArray(calRes.data) ? calRes.data : [];
+        console.log('[Calendar] Bookings loaded:', calData.length);
+      } catch (e) {
+        console.error('[Calendar] Failed to load bookings:', e);
+        setLoadError(`Ошибка загрузки бронирований: ${e}`);
+      }
+
+      try {
+        const roomsRes = await getRooms(selectedBranchId || undefined);
+        roomsData = Array.isArray(roomsRes.data) ? roomsRes.data : [];
+      } catch (e) {
+        console.error('[Calendar] Failed to load rooms:', e);
+      }
+
+      try {
+        const pricingRes = await getPricing();
+        pricingData = Array.isArray(pricingRes.data) ? pricingRes.data : [];
+      } catch (e) {
+        console.error('[Calendar] Failed to load pricing:', e);
+      }
+
+      try {
+        const cfgRes = await getSlotConfig();
+        if (cfgRes.data) cfgData = cfgRes.data;
+      } catch (e) {
+        console.error('[Calendar] Failed to load slot config:', e);
+      }
+
+      setBookings(calData);
+      setRooms(roomsData);
+      setPricing(pricingData);
+      setSlotCfg(cfgData);
+
+      const defaultSlots = generateSlots(cfgData, gridStartHour, gridTotal);
       const newSlots: RoomSlots = {};
-      for (const r of roomsRes.data) {
+      for (const r of roomsData) {
         newSlots[r.id] = roomSlots[r.id] || defaultSlots.map(s => ({ ...s }));
       }
       setRoomSlots(newSlots);
     } catch (err) {
       console.error('[Calendar] loadData error:', err);
+      setLoadError(`Ошибка: ${err}`);
       message.error('Ошибка загрузки данных календаря');
     } finally {
       setLoading(false);
@@ -957,6 +991,73 @@ export default function CalendarPage() {
                 </div>
               ));
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* Debug info + error display */}
+      {loadError && (
+        <div style={{ padding: 12, marginTop: 8, backgroundColor: '#fff2f0', border: '1px solid #ffccc7', borderRadius: 8 }}>
+          <strong style={{ color: '#cf1322' }}>Ошибка:</strong> {loadError}
+        </div>
+      )}
+
+      {/* Bookings list — always visible when bookings exist */}
+      {!loading && bookings.length > 0 && (
+        <div style={{ marginTop: 16, border: '1px solid #e8e8e8', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ padding: '8px 16px', backgroundColor: '#E36FA8', color: '#fff', fontWeight: 700, fontSize: 14 }}>
+            Бронирования на {date.format('D MMMM')} ({bookings.length})
+          </div>
+          <div style={{ maxHeight: 300, overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ backgroundColor: '#fafafa', position: 'sticky', top: 0 }}>
+                  <th style={{ padding: '6px 12px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>Время</th>
+                  <th style={{ padding: '6px 12px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>Гость</th>
+                  <th style={{ padding: '6px 12px', textAlign: 'center', borderBottom: '1px solid #e8e8e8' }}>Чел.</th>
+                  <th style={{ padding: '6px 12px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>Статус</th>
+                  <th style={{ padding: '6px 12px', textAlign: 'right', borderBottom: '1px solid #e8e8e8' }}>Сумма</th>
+                  <th style={{ padding: '6px 12px', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>Зал</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...bookings]
+                  .sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+                  .map((b: any) => {
+                    const st = dayjs(b.startTime);
+                    const en = dayjs(b.endTime);
+                    return (
+                      <tr
+                        key={b.id}
+                        onClick={() => { setPrefill(undefined); setSelectedBooking(b); setShowForm(true); }}
+                        style={{ cursor: 'pointer', borderBottom: '1px solid #f5f5f5' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f0f0f0')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '')}
+                      >
+                        <td style={{ padding: '6px 12px', whiteSpace: 'nowrap' }}>
+                          {st.format('HH:mm')}–{en.format('HH:mm')}
+                        </td>
+                        <td style={{ padding: '6px 12px' }}>{b.guestName || '—'}</td>
+                        <td style={{ padding: '6px 12px', textAlign: 'center' }}>{b.guestCount || '—'}</td>
+                        <td style={{ padding: '6px 12px' }}>
+                          <span style={{
+                            display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+                            backgroundColor: STATUS_COLORS[b.status] || '#ddd', color: '#fff',
+                          }}>
+                            {STATUS_LABELS[b.status] || b.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '6px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          {b.totalPrice ? `${(b.totalPrice / 1000).toFixed(1)}k` : '—'}
+                        </td>
+                        <td style={{ padding: '6px 12px', color: b.roomName ? '#333' : '#d48806' }}>
+                          {b.roomName || 'Без зала'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
