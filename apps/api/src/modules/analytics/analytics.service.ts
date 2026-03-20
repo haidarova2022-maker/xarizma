@@ -141,7 +141,7 @@ export class AnalyticsService {
     const hoursPerDay = 18;
 
     return allRooms.map((r: any) => {
-      const bt = branchMap.get(r.branch_id);
+      const bt: any = branchMap.get(r.branch_id);
       const roomCount = roomsPerBranch.get(r.branch_id) || 1;
       const branchBookings = bt ? bt.bookings : 0;
       const branchHours = bt ? Math.round(Number(bt.hours_sold)) : 0;
