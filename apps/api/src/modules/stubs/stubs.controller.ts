@@ -120,22 +120,29 @@ export class StubsController {
 
     const rows = (result as any).rows || [];
 
-    // Get pricing
+    // Get pricing by category + day_type
     const pricingResult = await this.db.execute(sql`
-      SELECT branch_id, room_category, day_type, price_per_hour
-      FROM pricing
+      SELECT category, day_type, price_per_hour
+      FROM price_rules
     `);
     const pricingRows = (pricingResult as any).rows || [];
     const priceMap = new Map<string, number>();
     for (const p of pricingRows) {
-      priceMap.set(`${p.branch_id}-${p.room_category}-${p.day_type}`, p.price_per_hour);
+      priceMap.set(`${p.category}-${p.day_type}`, p.price_per_hour);
     }
 
     return rows.map((r: any) => {
-      const dayOfWeek = new Date(r.date).getDay();
-      const dayType = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6 ? 'weekend' : 'weekday';
-      const pricePerHour = priceMap.get(`${r.branch_id}-${r.category}-${dayType}`)
-        || priceMap.get(`${r.branch_id}-${r.category}-weekday`)
+      const d = new Date(r.date);
+      const day = d.getDay();
+      const hour = 14; // midday default for day_type detection
+      let dayType: string;
+      if (day === 0) dayType = 'sunday';
+      else if (day === 6) dayType = 'saturday';
+      else if (day === 5) dayType = 'friday_day';
+      else dayType = 'weekday_day';
+
+      const pricePerHour = priceMap.get(`${r.category}-${dayType}`)
+        || priceMap.get(`${r.category}-weekday_day`)
         || 3000;
       const hours = Number(r.hours);
       return {
