@@ -20,7 +20,7 @@ export class PricingService {
   }
 
   async getPrice(
-    category: 'bratski' | 'vibe' | 'flex' | 'full_gas',
+    category: 'bratski' | 'vibe' | 'flex' | 'full_gas' | 'common',
     dayType: string,
     date?: Date,
   ): Promise<number> {
@@ -50,7 +50,7 @@ export class PricingService {
   }
 
   async calculateBookingPrice(
-    category: 'bratski' | 'vibe' | 'flex' | 'full_gas',
+    category: 'bratski' | 'vibe' | 'flex' | 'full_gas' | 'common',
     startTime: Date,
     endTime: Date,
   ) {
@@ -82,7 +82,7 @@ export class PricingService {
   }
 
   async create(data: {
-    category: 'bratski' | 'vibe' | 'flex' | 'full_gas';
+    category: 'bratski' | 'vibe' | 'flex' | 'full_gas' | 'common';
     dayType: string;
     timeFrom: string;
     timeTo: string;

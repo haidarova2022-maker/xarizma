@@ -14,7 +14,7 @@ import {
 
 // Enums
 export const roomCategoryEnum = pgEnum('room_category', [
-  'bratski', 'vibe', 'flex', 'full_gas',
+  'bratski', 'vibe', 'flex', 'full_gas', 'common',
 ]);
 
 export const dayTypeEnum = pgEnum('day_type', [
