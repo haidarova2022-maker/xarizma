@@ -89,7 +89,8 @@ export const getNotifications = (params?: any) => api.get('/notifications', { pa
 export const getNotificationStats = () => api.get('/notifications/stats');
 
 // Empty Slots
-export const getEmptySlots = (date?: string) => api.get('/empty-slots', { params: date ? { date } : {} });
+export const getEmptySlots = (params?: { date?: string; branchId?: number; category?: string }) =>
+  api.get('/empty-slots', { params });
 
 // Dashboard
 export const getDashboardStats = (branchId?: number) =>

@@ -39,12 +39,19 @@ export class StubsController {
   }
 
   @Get('empty-slots')
-  async getEmptySlots(@Query('date') dateStr?: string) {
+  async getEmptySlots(
+    @Query('date') dateStr?: string,
+    @Query('branchId') branchIdStr?: string,
+    @Query('category') category?: string,
+  ) {
     // Default to today + next 7 days
     const startDate = dateStr || new Date().toISOString().split('T')[0];
     const endDate = dateStr
       ? dateStr
       : new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+    const branchId = branchIdStr ? parseInt(branchIdStr, 10) : null;
+    const branchFilter = branchId ? sql`AND r.branch_id = ${branchId}` : sql``;
+    const categoryFilter = category ? sql`AND r.category::text = ${category}` : sql``;
 
     const result = await this.db.execute(sql`
       WITH date_range AS (
@@ -69,6 +76,8 @@ export class StubsController {
         CROSS JOIN date_range dr
         CROSS JOIN generate_series(10, 23) AS gs(h)
         WHERE r.is_active = true
+          ${branchFilter}
+          ${categoryFilter}
       ),
       booked_hours AS (
         SELECT

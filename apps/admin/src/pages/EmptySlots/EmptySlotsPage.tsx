@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Card, Typography, Badge, Empty, Divider, DatePicker, Button } from 'antd';
+import { Card, Typography, Badge, Empty, Divider, DatePicker, Button, Select } from 'antd';
 import { CalendarOutlined, LeftOutlined, RightOutlined, PlusOutlined } from '@ant-design/icons';
 import { getEmptySlots } from '../../api/client';
+import { useBranchStore } from '../../stores/branch-store';
 import dayjs, { Dayjs } from 'dayjs';
 import BookingFormModal from '../../components/BookingForm/BookingFormModal';
 
@@ -14,6 +15,15 @@ const categoryLabels: Record<string, string> = {
   full_gas: 'Полный газ',
   common: 'Общий зал',
 };
+
+const categoryOptions = [
+  { value: '', label: 'Все залы' },
+  { value: 'bratski', label: 'По-братски' },
+  { value: 'vibe', label: 'Вайб' },
+  { value: 'flex', label: 'Флекс' },
+  { value: 'full_gas', label: 'Полный газ' },
+  { value: 'common', label: 'Общий зал' },
+];
 
 interface EmptySlot {
   roomName: string;
@@ -32,18 +42,23 @@ export default function EmptySlotsPage() {
   const [slots, setSlots] = useState<EmptySlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState<Dayjs | null>(null);
+  const [filterCategory, setFilterCategory] = useState<string>('');
   const [showForm, setShowForm] = useState(false);
   const [prefill, setPrefill] = useState<{ roomId?: number; date?: Dayjs; timeFrom?: Dayjs; timeTo?: Dayjs } | undefined>();
+  const { selectedBranchId } = useBranchStore();
 
-  const loadSlots = useCallback((date?: Dayjs | null) => {
+  const loadSlots = useCallback(() => {
     setLoading(true);
-    const dateStr = date ? date.format('YYYY-MM-DD') : undefined;
-    getEmptySlots(dateStr)
+    const params: { date?: string; branchId?: number; category?: string } = {};
+    if (filterDate) params.date = filterDate.format('YYYY-MM-DD');
+    if (selectedBranchId) params.branchId = selectedBranchId;
+    if (filterCategory) params.category = filterCategory;
+    getEmptySlots(params)
       .then(({ data }) => { setSlots(data); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+  }, [filterDate, selectedBranchId, filterCategory]);
 
-  useEffect(() => { loadSlots(filterDate); }, [filterDate, loadSlots]);
+  useEffect(() => { loadSlots(); }, [loadSlots]);
 
   const formatDate = (iso: string) => dayjs(iso).format('dd, D MMM.');
   const catLabel = (cat: string) => categoryLabels[cat] || cat;
@@ -78,13 +93,20 @@ export default function EmptySlotsPage() {
       <Title level={3} style={{ marginBottom: 24 }}>Свободные слоты</Title>
 
       <Card loading={loading}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <CalendarOutlined style={{ fontSize: 20, color: '#52c41a' }} />
             <Text strong style={{ fontSize: 18 }}>Свободные слоты</Text>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Select
+              value={filterCategory}
+              onChange={setFilterCategory}
+              options={categoryOptions}
+              style={{ width: 150 }}
+              size="small"
+            />
             <Button
               size="small"
               icon={<LeftOutlined />}
@@ -178,7 +200,7 @@ export default function EmptySlotsPage() {
         open={showForm}
         prefill={prefill}
         onClose={() => setShowForm(false)}
-        onSuccess={() => { setShowForm(false); loadSlots(filterDate); }}
+        onSuccess={() => { setShowForm(false); loadSlots(); }}
       />
     </div>
   );
